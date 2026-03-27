@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-// BentoPDF static file server
+// BentoPDF static file server (CommonJS)
 // Serves the built Vite app with required COOP/COEP headers for WASM support
 
-import http from 'http';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+'use strict';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+
 const ROOT = path.join(__dirname, '..', 'var', 'www', 'bentopdf');
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 9080;
 
 const MIME_TYPES = {
   '.html': 'text/html',
@@ -45,20 +45,20 @@ const SECURITY_HEADERS = {
   'X-XSS-Protection': '1; mode=block',
 };
 
-function serveFile(res, filePath, statusCode = 200) {
-  const ext = path.extname(filePath).toLowerCase();
-  const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+function serveFile(res, filePath, statusCode) {
+  statusCode = statusCode || 200;
+  var ext = path.extname(filePath).toLowerCase();
+  var contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
   // Handle pre-compressed .gz files for wasm/data
-  const gzPath = filePath + '.gz';
-  if (['.wasm', '.data'].includes(ext) && fs.existsSync(gzPath)) {
-    res.writeHead(statusCode, {
+  var gzPath = filePath + '.gz';
+  if ((ext === '.wasm' || ext === '.data') && fs.existsSync(gzPath)) {
+    res.writeHead(statusCode, Object.assign({
       'Content-Type': contentType,
       'Content-Encoding': 'gzip',
       'Vary': 'Accept-Encoding',
       'Cache-Control': 'public, immutable, max-age=31536000',
-      ...SECURITY_HEADERS,
-    });
+    }, SECURITY_HEADERS));
     fs.createReadStream(gzPath).pipe(res);
     return;
   }
@@ -68,22 +68,24 @@ function serveFile(res, filePath, statusCode = 200) {
     return;
   }
 
-  const cacheControl = ['.html'].includes(ext)
-    ? 'public, must-revalidate, max-age=300'
-    : ['.js', '.mjs', '.css', '.wasm', '.woff', '.woff2'].includes(ext)
-    ? 'public, immutable, max-age=31536000'
-    : 'public, max-age=3600';
+  var cacheControl;
+  if (ext === '.html') {
+    cacheControl = 'public, must-revalidate, max-age=300';
+  } else if (['.js', '.mjs', '.css', '.wasm', '.woff', '.woff2'].indexOf(ext) !== -1) {
+    cacheControl = 'public, immutable, max-age=31536000';
+  } else {
+    cacheControl = 'public, max-age=3600';
+  }
 
-  res.writeHead(statusCode, {
+  res.writeHead(statusCode, Object.assign({
     'Content-Type': contentType,
     'Cache-Control': cacheControl,
-    ...SECURITY_HEADERS,
-  });
+  }, SECURITY_HEADERS));
   fs.createReadStream(filePath).pipe(res);
 }
 
 function serve404(res) {
-  const notFound = path.join(ROOT, '404.html');
+  var notFound = path.join(ROOT, '404.html');
   if (fs.existsSync(notFound)) {
     serveFile(res, notFound, 404);
   } else {
@@ -92,14 +94,14 @@ function serve404(res) {
   }
 }
 
-const server = http.createServer((req, res) => {
-  let urlPath = req.url.split('?')[0];
+var server = http.createServer(function(req, res) {
+  var urlPath = req.url.split('?')[0];
 
   // Normalise path
-  let filePath = path.join(ROOT, urlPath);
+  var filePath = path.join(ROOT, urlPath);
 
   // Security: prevent directory traversal
-  if (!filePath.startsWith(ROOT)) {
+  if (filePath.indexOf(ROOT) !== 0) {
     res.writeHead(403);
     res.end('Forbidden');
     return;
@@ -110,14 +112,14 @@ const server = http.createServer((req, res) => {
     filePath = path.join(filePath, 'index.html');
   }
 
-  // Try exact file, then .html extension, then index.html, then 404
+  // Try exact file, then .html extension, then SPA index fallback
   if (fs.existsSync(filePath)) {
     serveFile(res, filePath);
   } else if (fs.existsSync(filePath + '.html')) {
     serveFile(res, filePath + '.html');
   } else {
-    // SPA fallback for i18n routes → try /index.html
-    const indexFallback = path.join(ROOT, 'index.html');
+    // SPA fallback for i18n routes → serve index.html
+    var indexFallback = path.join(ROOT, 'index.html');
     if (fs.existsSync(indexFallback)) {
       serveFile(res, indexFallback);
     } else {
@@ -126,6 +128,6 @@ const server = http.createServer((req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`BentoPDF server running at http://localhost:${PORT}`);
+server.listen(PORT, function() {
+  console.log('BentoPDF server running at http://localhost:' + PORT);
 });
