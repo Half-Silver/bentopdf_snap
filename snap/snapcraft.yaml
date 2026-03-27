@@ -3,7 +3,7 @@ base: core24
 version: '2.7.0'
 summary: Convert bento layouts to PDF and Free Online PDF Tools
 description: |
-  BentoPDF is a free online PDF toolkit with 100+ tools. 
+  BentoPDF is a free online PDF toolkit with 100+ tools.
   Merge, split, compress, convert PDFs - 100% browser-based.
 
 grade: stable
@@ -14,53 +14,35 @@ platforms:
 
 apps:
   bentopdf:
-    command: bin/start-nginx.sh
+    command: bin/start-server.sh
     daemon: simple
     plugs:
       - network
       - network-bind
 
-layout:
-  /etc/nginx:
-    bind: $SNAP/etc/nginx
-  /var/log/nginx:
-    bind: $SNAP_DATA/var/log/nginx
-  /var/lib/nginx:
-    bind: $SNAP_DATA/var/lib/nginx
-  /var/www:
-    bind: $SNAP/var/www
-  /run/nginx:
-    bind: $SNAP_DATA/run/nginx
-
 parts:
   bentopdf-web:
     plugin: nil
     source: .
+    build-packages:
+      - nodejs
+      - npm
     build-environment:
-      - NODE_OPTIONS: "--max-old-space-size=3072"
+      - NODE_OPTIONS: '--max-old-space-size=3072'
     override-build: |
       npm install
       npm run build
       mkdir -p $CRAFT_PART_INSTALL/var/www/bentopdf
       cp -r dist/* $CRAFT_PART_INSTALL/var/www/bentopdf/
 
-  nginx:
+  node-runtime:
     plugin: nil
-    override-build: |
-      # Copy nginx binary and its dependencies from the host
-      mkdir -p $CRAFT_PART_INSTALL/usr/sbin
-      mkdir -p $CRAFT_PART_INSTALL/etc/nginx
-      # Copy the nginx binary
-      cp $(which nginx) $CRAFT_PART_INSTALL/usr/sbin/nginx
-      # Copy mime.types for nginx
-      if [ -f /etc/nginx/mime.types ]; then
-        cp /etc/nginx/mime.types $CRAFT_PART_INSTALL/etc/nginx/mime.types
-      fi
+    stage-packages:
+      - nodejs
 
-  nginx-conf:
+  server-files:
     plugin: dump
     source: snap/local
-    after: [nginx]
     organize:
-      nginx.conf: etc/nginx/nginx.conf
-      start-nginx.sh: bin/start-nginx.sh
+      server.js: bin/server.js
+      start-server.sh: bin/start-server.sh
