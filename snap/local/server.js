@@ -37,9 +37,10 @@ var MIME_TYPES = {
   '.data': 'application/octet-stream',
 };
 
-// COOP/COEP headers — only for file types that need SharedArrayBuffer/WASM.
-// Matching the original nginx config: HTML, JS, CSS, WASM, fonts get these.
-// Images, JSON, PDF do NOT get these (they break blob URL downloads).
+// COOP/COEP headers for SharedArrayBuffer/WASM support.
+// IMPORTANT: Chrome ignores these on non-HTTPS, non-localhost origins and
+// their presence causes blob URL downloads to fail. Only send them when
+// the request comes via localhost (where the browser respects them).
 var CROSS_ORIGIN_HEADERS = {
   'Cross-Origin-Embedder-Policy': 'require-corp',
   'Cross-Origin-Opener-Policy': 'same-origin',
@@ -56,7 +57,12 @@ var BASE_SECURITY_HEADERS = {
   'X-XSS-Protection': '1; mode=block',
 };
 
-function getHeaders(ext, cacheControl) {
+function isLocalhostRequest(req) {
+  var host = req.headers.host || '';
+  return host.startsWith('localhost') || host.startsWith('127.0.0.1') || host.startsWith('[::1]');
+}
+
+function getHeaders(ext, cacheControl, req) {
   var headers = {
     'Cache-Control': cacheControl,
   };
@@ -67,8 +73,9 @@ function getHeaders(ext, cacheControl) {
     headers[key] = BASE_SECURITY_HEADERS[key];
   }
 
-  // Only add COOP/COEP to extensions that need them
-  if (COEP_EXTENSIONS.indexOf(ext) !== -1) {
+  // Only add COOP/COEP on localhost (browsers ignore them on non-HTTPS LAN IPs
+  // and they break blob URL downloads)
+  if (req && isLocalhostRequest(req) && COEP_EXTENSIONS.indexOf(ext) !== -1) {
     for (key in CROSS_ORIGIN_HEADERS) {
       headers[key] = CROSS_ORIGIN_HEADERS[key];
     }
@@ -77,7 +84,7 @@ function getHeaders(ext, cacheControl) {
   return headers;
 }
 
-function serveFile(res, filePath, statusCode) {
+function serveFile(req, res, filePath, statusCode) {
   statusCode = statusCode || 200;
   var ext = path.extname(filePath).toLowerCase();
   var contentType = MIME_TYPES[ext] || 'application/octet-stream';
@@ -85,7 +92,7 @@ function serveFile(res, filePath, statusCode) {
   // Handle pre-compressed .gz files for wasm/data
   var gzPath = filePath + '.gz';
   if ((ext === '.wasm' || ext === '.data') && fs.existsSync(gzPath)) {
-    var gzHeaders = getHeaders(ext, 'public, immutable, max-age=31536000');
+    var gzHeaders = getHeaders(ext, 'public, immutable, max-age=31536000', req);
     gzHeaders['Content-Type'] = contentType;
     gzHeaders['Content-Encoding'] = 'gzip';
     gzHeaders['Vary'] = 'Accept-Encoding';
@@ -95,7 +102,7 @@ function serveFile(res, filePath, statusCode) {
   }
 
   if (!fs.existsSync(filePath)) {
-    serve404(res);
+    serve404(req, res);
     return;
   }
 
@@ -114,16 +121,16 @@ function serveFile(res, filePath, statusCode) {
     cacheControl = 'public, max-age=3600';
   }
 
-  var finalHeaders = getHeaders(ext, cacheControl);
+  var finalHeaders = getHeaders(ext, cacheControl, req);
   finalHeaders['Content-Type'] = contentType;
   res.writeHead(statusCode, finalHeaders);
   fs.createReadStream(filePath).pipe(res);
 }
 
-function serve404(res) {
+function serve404(req, res) {
   var notFound = path.join(ROOT, '404.html');
   if (fs.existsSync(notFound)) {
-    serveFile(res, notFound, 404);
+    serveFile(req, res, notFound, 404);
   } else {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('404 Not Found');
@@ -150,16 +157,16 @@ var server = http.createServer(function(req, res) {
 
   // Try exact file, then .html extension, then SPA index fallback
   if (fs.existsSync(filePath)) {
-    serveFile(res, filePath);
+    serveFile(req, res, filePath);
   } else if (fs.existsSync(filePath + '.html')) {
-    serveFile(res, filePath + '.html');
+    serveFile(req, res, filePath + '.html');
   } else {
     // SPA fallback for i18n routes → serve index.html
     var indexFallback = path.join(ROOT, 'index.html');
     if (fs.existsSync(indexFallback)) {
-      serveFile(res, indexFallback);
+      serveFile(req, res, indexFallback);
     } else {
-      serve404(res);
+      serve404(req, res);
     }
   }
 });
