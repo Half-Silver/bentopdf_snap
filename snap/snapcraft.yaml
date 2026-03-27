@@ -37,8 +37,14 @@ parts:
 
   node-runtime:
     plugin: nil
-    stage-packages:
-      - nodejs
+    override-build: |
+      # Use the host's self-contained node binary (v20 from nodesource/nvm),
+      # NOT Ubuntu's apt nodejs which requires externalized builtins not in the snap.
+      mkdir -p $CRAFT_PART_INSTALL/usr/bin
+      NODE_BIN=$(which node)
+      echo "Bundling node from: $NODE_BIN  ($(node --version))"
+      cp "$NODE_BIN" $CRAFT_PART_INSTALL/usr/bin/node
+      chmod +x $CRAFT_PART_INSTALL/usr/bin/node
 
   server-files:
     plugin: dump
