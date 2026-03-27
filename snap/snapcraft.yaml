@@ -46,8 +46,16 @@ parts:
 
   nginx:
     plugin: nil
-    stage-packages:
-      - nginx-light
+    override-build: |
+      # Copy nginx binary and its dependencies from the host
+      mkdir -p $CRAFT_PART_INSTALL/usr/sbin
+      mkdir -p $CRAFT_PART_INSTALL/etc/nginx
+      # Copy the nginx binary
+      cp $(which nginx) $CRAFT_PART_INSTALL/usr/sbin/nginx
+      # Copy mime.types for nginx
+      if [ -f /etc/nginx/mime.types ]; then
+        cp /etc/nginx/mime.types $CRAFT_PART_INSTALL/etc/nginx/mime.types
+      fi
 
   nginx-conf:
     plugin: dump
