@@ -12,6 +12,12 @@ confinement: strict
 platforms:
   amd64:
 
+layout:
+  /usr/share/nodejs:
+    bind: $SNAP/usr/share/nodejs
+  /usr/lib/nodejs:
+    bind: $SNAP/usr/lib/nodejs
+
 apps:
   bentopdf:
     command: bin/start-server.sh
@@ -37,28 +43,8 @@ parts:
 
   node-runtime:
     plugin: nil
-    override-build: |
-      # Find the real node binary, skipping snap shim wrappers.
-      # Priority: nodesource (/usr/local/bin), nvm, apt (/usr/bin), fallback.
-      NODE_BIN=""
-      for candidate in /usr/local/bin/node /usr/bin/node /home/*/nvm/versions/node/*/bin/node; do
-        if [ -x "$candidate" ] && file "$candidate" | grep -q "ELF"; then
-          NODE_BIN="$candidate"
-          break
-        fi
-      done
-      if [ -z "$NODE_BIN" ]; then
-        echo "ERROR: Could not find a real (non-snap) node binary!"
-        echo "Candidates checked:"
-        ls -la /usr/local/bin/node /usr/bin/node 2>&1 || true
-        file /usr/local/bin/node /usr/bin/node 2>&1 || true
-        exit 1
-      fi
-      echo "Found real node binary at: $NODE_BIN"
-      echo "Version: $($NODE_BIN --version)"
-      mkdir -p $CRAFT_PART_INSTALL/usr/bin
-      cp "$NODE_BIN" $CRAFT_PART_INSTALL/usr/bin/node
-      chmod +x $CRAFT_PART_INSTALL/usr/bin/node
+    stage-packages:
+      - nodejs
 
   server-files:
     plugin: dump
