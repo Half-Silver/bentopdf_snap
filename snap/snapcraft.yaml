@@ -37,14 +37,23 @@ parts:
 
   node-runtime:
     plugin: nil
+    build-packages:
+      - curl
+      - xz-utils
     override-build: |
-      # Use the host's self-contained node binary (v20 from nodesource/nvm),
-      # NOT Ubuntu's apt nodejs which requires externalized builtins not in the snap.
+      # Download the official Node.js binary — self-contained, no external deps.
+      # Do NOT use the host's 'which node' (may resolve to a snap shim wrapper),
+      # and do NOT use Ubuntu's apt nodejs (uses externalized builtins that crash in snaps).
+      NODE_VERSION="v20.18.0"
+      ARCH="linux-x64"
+      TARBALL="node-${NODE_VERSION}-${ARCH}.tar.xz"
+      echo "Downloading Node.js ${NODE_VERSION}..."
+      curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/${TARBALL}" -o /tmp/${TARBALL}
+      tar -xf /tmp/${TARBALL} -C /tmp
       mkdir -p $CRAFT_PART_INSTALL/usr/bin
-      NODE_BIN=$(which node)
-      echo "Bundling node from: $NODE_BIN  ($(node --version))"
-      cp "$NODE_BIN" $CRAFT_PART_INSTALL/usr/bin/node
+      cp "/tmp/node-${NODE_VERSION}-${ARCH}/bin/node" $CRAFT_PART_INSTALL/usr/bin/node
       chmod +x $CRAFT_PART_INSTALL/usr/bin/node
+      echo "Bundled: $($CRAFT_PART_INSTALL/usr/bin/node --version)"
 
   server-files:
     plugin: dump
