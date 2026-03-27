@@ -37,23 +37,28 @@ parts:
 
   node-runtime:
     plugin: nil
-    build-packages:
-      - curl
-      - xz-utils
     override-build: |
-      # Download the official Node.js binary — self-contained, no external deps.
-      # Do NOT use the host's 'which node' (may resolve to a snap shim wrapper),
-      # and do NOT use Ubuntu's apt nodejs (uses externalized builtins that crash in snaps).
-      NODE_VERSION="v20.18.0"
-      ARCH="linux-x64"
-      TARBALL="node-${NODE_VERSION}-${ARCH}.tar.xz"
-      echo "Downloading Node.js ${NODE_VERSION}..."
-      curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/${TARBALL}" -o /tmp/${TARBALL}
-      tar -xf /tmp/${TARBALL} -C /tmp
+      # Find the real node binary, skipping snap shim wrappers.
+      # Priority: nodesource (/usr/local/bin), nvm, apt (/usr/bin), fallback.
+      NODE_BIN=""
+      for candidate in /usr/local/bin/node /usr/bin/node /home/*/nvm/versions/node/*/bin/node; do
+        if [ -x "$candidate" ] && file "$candidate" | grep -q "ELF"; then
+          NODE_BIN="$candidate"
+          break
+        fi
+      done
+      if [ -z "$NODE_BIN" ]; then
+        echo "ERROR: Could not find a real (non-snap) node binary!"
+        echo "Candidates checked:"
+        ls -la /usr/local/bin/node /usr/bin/node 2>&1 || true
+        file /usr/local/bin/node /usr/bin/node 2>&1 || true
+        exit 1
+      fi
+      echo "Found real node binary at: $NODE_BIN"
+      echo "Version: $($NODE_BIN --version)"
       mkdir -p $CRAFT_PART_INSTALL/usr/bin
-      cp "/tmp/node-${NODE_VERSION}-${ARCH}/bin/node" $CRAFT_PART_INSTALL/usr/bin/node
+      cp "$NODE_BIN" $CRAFT_PART_INSTALL/usr/bin/node
       chmod +x $CRAFT_PART_INSTALL/usr/bin/node
-      echo "Bundled: $($CRAFT_PART_INSTALL/usr/bin/node --version)"
 
   server-files:
     plugin: dump

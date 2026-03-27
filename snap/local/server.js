@@ -4,14 +4,14 @@
 
 'use strict';
 
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
+var http = require('http');
+var fs = require('fs');
+var path = require('path');
 
-const ROOT = path.join(__dirname, '..', 'var', 'www', 'bentopdf');
-const PORT = process.env.PORT || 9080;
+var ROOT = path.join(__dirname, '..', 'var', 'www', 'bentopdf');
+var PORT = process.env.PORT || 9080;
 
-const MIME_TYPES = {
+var MIME_TYPES = {
   '.html': 'text/html',
   '.css': 'text/css',
   '.js': 'application/javascript',
@@ -34,16 +34,48 @@ const MIME_TYPES = {
   '.xml': 'application/xml',
   '.txt': 'text/plain',
   '.webmanifest': 'application/manifest+json',
+  '.data': 'application/octet-stream',
 };
 
-const SECURITY_HEADERS = {
+// COOP/COEP headers — only for file types that need SharedArrayBuffer/WASM.
+// Matching the original nginx config: HTML, JS, CSS, WASM, fonts get these.
+// Images, JSON, PDF do NOT get these (they break blob URL downloads).
+var CROSS_ORIGIN_HEADERS = {
   'Cross-Origin-Embedder-Policy': 'require-corp',
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Resource-Policy': 'cross-origin',
+};
+
+// Extensions that need COOP/COEP (matching nginx config)
+var COEP_EXTENSIONS = ['.html', '.js', '.mjs', '.css', '.wasm', '.woff', '.woff2', '.ttf', '.eot', '.otf', '.data'];
+
+// Base security headers for all responses
+var BASE_SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'SAMEORIGIN',
   'X-XSS-Protection': '1; mode=block',
 };
+
+function getHeaders(ext, cacheControl) {
+  var headers = {
+    'Cache-Control': cacheControl,
+  };
+
+  // Add base security headers to all
+  var key;
+  for (key in BASE_SECURITY_HEADERS) {
+    headers[key] = BASE_SECURITY_HEADERS[key];
+  }
+
+  // Only add COOP/COEP to extensions that need them
+  if (COEP_EXTENSIONS.indexOf(ext) !== -1) {
+    for (key in CROSS_ORIGIN_HEADERS) {
+      headers[key] = CROSS_ORIGIN_HEADERS[key];
+    }
+  }
+
+  return headers;
+}
 
 function serveFile(res, filePath, statusCode) {
   statusCode = statusCode || 200;
@@ -53,12 +85,11 @@ function serveFile(res, filePath, statusCode) {
   // Handle pre-compressed .gz files for wasm/data
   var gzPath = filePath + '.gz';
   if ((ext === '.wasm' || ext === '.data') && fs.existsSync(gzPath)) {
-    res.writeHead(statusCode, Object.assign({
-      'Content-Type': contentType,
-      'Content-Encoding': 'gzip',
-      'Vary': 'Accept-Encoding',
-      'Cache-Control': 'public, immutable, max-age=31536000',
-    }, SECURITY_HEADERS));
+    var gzHeaders = getHeaders(ext, 'public, immutable, max-age=31536000');
+    gzHeaders['Content-Type'] = contentType;
+    gzHeaders['Content-Encoding'] = 'gzip';
+    gzHeaders['Vary'] = 'Accept-Encoding';
+    res.writeHead(statusCode, gzHeaders);
     fs.createReadStream(gzPath).pipe(res);
     return;
   }
@@ -73,14 +104,19 @@ function serveFile(res, filePath, statusCode) {
     cacheControl = 'public, must-revalidate, max-age=300';
   } else if (['.js', '.mjs', '.css', '.wasm', '.woff', '.woff2'].indexOf(ext) !== -1) {
     cacheControl = 'public, immutable, max-age=31536000';
+  } else if (['.png', '.jpg', '.jpeg', '.gif', '.ico', '.svg', '.webp'].indexOf(ext) !== -1) {
+    cacheControl = 'public, immutable, max-age=31536000';
+  } else if (ext === '.json') {
+    cacheControl = 'public, must-revalidate, max-age=604800';
+  } else if (ext === '.pdf') {
+    cacheControl = 'public, immutable, max-age=31536000';
   } else {
     cacheControl = 'public, max-age=3600';
   }
 
-  res.writeHead(statusCode, Object.assign({
-    'Content-Type': contentType,
-    'Cache-Control': cacheControl,
-  }, SECURITY_HEADERS));
+  var finalHeaders = getHeaders(ext, cacheControl);
+  finalHeaders['Content-Type'] = contentType;
+  res.writeHead(statusCode, finalHeaders);
   fs.createReadStream(filePath).pipe(res);
 }
 
