@@ -1,0 +1,60 @@
+name: bentopdf
+base: core24
+version: '2.7.0'
+summary: Convert bento layouts to PDF and Free Online PDF Tools
+description: |
+  BentoPDF is a free online PDF toolkit with 100+ tools. 
+  Merge, split, compress, convert PDFs - 100% browser-based.
+
+grade: stable
+confinement: strict
+
+architectures:
+  - build-on: [amd64]
+
+apps:
+  bentopdf:
+    command: bin/start-nginx.sh
+    daemon: simple
+    plugs:
+      - network
+      - network-bind
+
+layout:
+  /etc/nginx:
+    bind: $SNAP/etc/nginx
+  /var/log/nginx:
+    bind: $SNAP_DATA/var/log/nginx
+  /var/lib/nginx:
+    bind: $SNAP_DATA/var/lib/nginx
+  /var/www:
+    bind: $SNAP/var/www
+  /run/nginx:
+    bind: $SNAP_DATA/run/nginx
+
+parts:
+  bentopdf-web:
+    plugin: nil
+    source: .
+    build-snaps:
+      - node/20/stable
+    build-environment:
+      - NODE_OPTIONS: "--max-old-space-size=3072"
+    override-build: |
+      npm install
+      npm run build
+      mkdir -p $CRAFT_PART_INSTALL/var/www/bentopdf
+      cp -r dist/* $CRAFT_PART_INSTALL/var/www/bentopdf/
+
+  nginx:
+    plugin: nil
+    stage-packages:
+      - nginx-light
+
+  nginx-conf:
+    plugin: dump
+    source: snap/local
+    after: [nginx]
+    organize:
+      nginx.conf: etc/nginx/nginx.conf
+      start-nginx.sh: bin/start-nginx.sh
