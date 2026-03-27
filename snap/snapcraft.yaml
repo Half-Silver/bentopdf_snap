@@ -36,9 +36,6 @@ parts:
   bentopdf-web:
     plugin: nil
     source: .
-    build-packages:
-      - nodejs
-      - npm
     build-environment:
       - NODE_OPTIONS: "--max-old-space-size=3072"
     override-build: |
