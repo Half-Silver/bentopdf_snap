@@ -65,7 +65,6 @@ function getHeaders(ext, cacheControl) {
     headers[key] = BASE_SECURITY_HEADERS[key];
   }
 
-  // Add COOP/COEP for extensions that need SharedArrayBuffer
   if (COEP_EXTENSIONS.indexOf(ext) !== -1) {
     for (key in CROSS_ORIGIN_HEADERS) {
       headers[key] = CROSS_ORIGIN_HEADERS[key];
@@ -75,19 +74,47 @@ function getHeaders(ext, cacheControl) {
   return headers;
 }
 
+// Check if a file is a pre-compressed .gz of a known type (e.g. soffice.wasm.gz)
+// Returns the inner extension if so, null otherwise
+function getInnerGzExtension(filePath) {
+  if (!filePath.endsWith('.gz')) return null;
+  // Strip .gz to find inner extension: soffice.wasm.gz -> .wasm, soffice.data.gz -> .data
+  var withoutGz = filePath.slice(0, -3);
+  var innerExt = path.extname(withoutGz).toLowerCase();
+  if (innerExt === '.wasm' || innerExt === '.data') {
+    return innerExt;
+  }
+  return null;
+}
+
 function serveFile(res, filePath, statusCode) {
   statusCode = statusCode || 200;
   var ext = path.extname(filePath).toLowerCase();
-  var contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
-  // Handle pre-compressed .gz files for wasm/data
-  var gzPath = filePath + '.gz';
-  if ((ext === '.wasm' || ext === '.data') && fs.existsSync(gzPath)) {
-    var gzHeaders = getHeaders(ext, 'public, immutable, max-age=31536000');
-    gzHeaders['Content-Type'] = contentType;
+  // Handle direct requests for .wasm.gz / .data.gz files
+  // (LibreOffice WASM loader fetches soffice.wasm.gz and soffice.data.gz directly)
+  var innerGzExt = getInnerGzExtension(filePath);
+  if (innerGzExt && fs.existsSync(filePath)) {
+    var innerContentType = MIME_TYPES[innerGzExt] || 'application/octet-stream';
+    var gzHeaders = getHeaders(innerGzExt, 'public, immutable, max-age=31536000');
+    gzHeaders['Content-Type'] = innerContentType;
     gzHeaders['Content-Encoding'] = 'gzip';
     gzHeaders['Vary'] = 'Accept-Encoding';
     res.writeHead(statusCode, gzHeaders);
+    fs.createReadStream(filePath).pipe(res);
+    return;
+  }
+
+  var contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
+  // Handle transparent pre-compressed: request for .wasm, serve .wasm.gz if available
+  var gzPath = filePath + '.gz';
+  if ((ext === '.wasm' || ext === '.data') && fs.existsSync(gzPath)) {
+    var transparentHeaders = getHeaders(ext, 'public, immutable, max-age=31536000');
+    transparentHeaders['Content-Type'] = contentType;
+    transparentHeaders['Content-Encoding'] = 'gzip';
+    transparentHeaders['Vary'] = 'Accept-Encoding';
+    res.writeHead(statusCode, transparentHeaders);
     fs.createReadStream(gzPath).pipe(res);
     return;
   }
