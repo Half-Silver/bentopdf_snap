@@ -45,6 +45,7 @@ parts:
     plugin: nil
     stage-packages:
       - nodejs
+      - openssl
 
   server-files:
     plugin: dump
