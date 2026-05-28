@@ -1,8 +1,8 @@
-import { defineConfig, Plugin } from 'vitest/config';
+import { defineConfig } from 'vitest/config';
 import type { IncomingMessage, ServerResponse } from 'http';
 import http from 'http';
 import https from 'https';
-import type { Connect } from 'vite';
+import type { Connect, Plugin } from 'vite';
 // import basicSsl from '@vitejs/plugin-basic-ssl';
 import tailwindcss from '@tailwindcss/vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
@@ -12,7 +12,6 @@ import handlebars from 'vite-plugin-handlebars';
 import { resolve } from 'path';
 import fs from 'fs';
 import { constants as zlibConstants } from 'zlib';
-import type { OutputBundle } from 'rollup';
 
 const SUPPORTED_LANGUAGES = [
   'en',
@@ -33,6 +32,8 @@ const SUPPORTED_LANGUAGES = [
   'zh',
   'zh-TW',
   'ko',
+  'ja',
+  'uk',
 ] as const;
 const LANG_REGEX = new RegExp(
   `^/(${SUPPORTED_LANGUAGES.join('|')})(?:/(.*))?$`
@@ -200,6 +201,52 @@ function createLanguageMiddleware(isDev: boolean): Connect.NextHandleFunction {
   };
 }
 
+function buildCorsProxyAllowedHosts(): Set<string> {
+  const hosts = new Set<string>([
+    'cdn.jsdelivr.net',
+    'fonts.googleapis.com',
+    'fonts.gstatic.com',
+    'bentopdf-cors-proxy.bentopdf.workers.dev',
+    'timestamp.digicert.com',
+    'timestamp.sectigo.com',
+    'ts.ssl.com',
+    'freetsa.org',
+    'tsa.mesign.com',
+  ]);
+
+  const envHostSources = [
+    process.env.VITE_CORS_PROXY_URL,
+    process.env.VITE_WASM_PYMUPDF_URL,
+    process.env.VITE_WASM_GS_URL,
+    process.env.VITE_WASM_CPDF_URL,
+    process.env.VITE_TESSERACT_WORKER_URL,
+    process.env.VITE_TESSERACT_CORE_URL,
+    process.env.VITE_TESSERACT_LANG_URL,
+    process.env.VITE_OCR_FONT_BASE_URL,
+  ];
+  for (const raw of envHostSources) {
+    if (!raw) continue;
+    try {
+      hosts.add(new URL(raw).hostname);
+    } catch {
+      console.warn(
+        `[vite] Ignoring malformed VITE_* URL in dev CORS proxy allowlist: ${raw}`
+      );
+    }
+  }
+
+  const extra = process.env.VITE_DEV_CORS_PROXY_EXTRA_HOSTS;
+  if (extra) {
+    for (const host of extra.split(',').map((s) => s.trim())) {
+      if (host) hosts.add(host);
+    }
+  }
+
+  return hosts;
+}
+
+const CORS_PROXY_ALLOWED_HOSTS = buildCorsProxyAllowedHosts();
+
 function createCorsProxyMiddleware(): Connect.NextHandleFunction {
   return (
     req: IncomingMessage,
@@ -222,6 +269,31 @@ function createCorsProxyMiddleware(): Connect.NextHandleFunction {
     if (!targetUrl) {
       res.statusCode = 400;
       res.end('Missing url parameter');
+      return;
+    }
+
+    let targetHost: string;
+    let targetProtocol: string;
+    try {
+      const parsedTarget = new URL(targetUrl);
+      targetHost = parsedTarget.hostname;
+      targetProtocol = parsedTarget.protocol;
+    } catch {
+      res.statusCode = 400;
+      res.end('Invalid url parameter');
+      return;
+    }
+
+    if (targetProtocol !== 'https:' && targetProtocol !== 'http:') {
+      res.statusCode = 400;
+      res.end('Unsupported protocol');
+      return;
+    }
+
+    if (!CORS_PROXY_ALLOWED_HOSTS.has(targetHost)) {
+      console.warn(`[CORS Proxy] Blocked disallowed host: ${targetHost}`);
+      res.statusCode = 403;
+      res.end(`Host not allowed: ${targetHost}`);
       return;
     }
 
@@ -261,9 +333,10 @@ function createCorsProxyMiddleware(): Connect.NextHandleFunction {
       );
 
       proxyReq.on('error', (err) => {
-        console.error('[CORS Proxy] Error:', err.message);
+        const msg = String(err.message).replace(/[\r\n]+/g, ' ');
+        console.error('[CORS Proxy] Error:', msg);
         res.statusCode = 502;
-        res.end(`Proxy error: ${err.message}`);
+        res.end(`Proxy error: ${msg}`);
       });
 
       if (body.length > 0) {
@@ -292,19 +365,41 @@ function flattenPagesPlugin(): Plugin {
   return {
     name: 'flatten-pages',
     enforce: 'post',
-    generateBundle(_: unknown, bundle: OutputBundle): void {
+    writeBundle(options, bundle) {
+      const outDir = options.dir;
+      if (!outDir) return;
+
+      const moves: Array<{ from: string; to: string }> = [];
+
       for (const fileName of Object.keys(bundle)) {
         if (fileName.startsWith('src/pages/') && fileName.endsWith('.html')) {
-          const newFileName = fileName.replace('src/pages/', '');
-          bundle[newFileName] = bundle[fileName];
-          bundle[newFileName].fileName = newFileName;
-          delete bundle[fileName];
+          moves.push({
+            from: fileName,
+            to: fileName.replace('src/pages/', ''),
+          });
         }
       }
+
       if (process.env.SIMPLE_MODE === 'true' && bundle['simple-index.html']) {
-        bundle['index.html'] = bundle['simple-index.html'];
-        bundle['index.html'].fileName = 'index.html';
-        delete bundle['simple-index.html'];
+        moves.push({ from: 'simple-index.html', to: 'index.html' });
+      }
+
+      for (const { from, to } of moves) {
+        const oldPath = resolve(outDir, from);
+        const newPath = resolve(outDir, to);
+        if (!fs.existsSync(oldPath)) continue;
+        fs.mkdirSync(resolve(newPath, '..'), { recursive: true });
+        if (fs.existsSync(newPath)) fs.rmSync(newPath, { force: true });
+        fs.renameSync(oldPath, newPath);
+      }
+
+      const pagesDir = resolve(outDir, 'src/pages');
+      if (fs.existsSync(pagesDir) && fs.readdirSync(pagesDir).length === 0) {
+        fs.rmdirSync(pagesDir);
+      }
+      const srcDir = resolve(outDir, 'src');
+      if (fs.existsSync(srcDir) && fs.readdirSync(srcDir).length === 0) {
+        fs.rmdirSync(srcDir);
       }
     },
   };
@@ -319,31 +414,35 @@ function rewriteHtmlPathsPlugin(): Plugin {
   return {
     name: 'rewrite-html-paths',
     enforce: 'post',
-    generateBundle(_: unknown, bundle: OutputBundle): void {
+    writeBundle(options, bundle) {
       if (normalizedBase === '/') return;
+      const outDir = options.dir;
+      if (!outDir) return;
+
+      const hrefRegex = new RegExp(
+        `href="\\/(?!${escapedBase.slice(1)}|test\\/|http|\\/\\/)`,
+        'g'
+      );
+      const srcRegex = new RegExp(
+        `src="\\/(?!${escapedBase.slice(1)}|test\\/|http|\\/\\/)`,
+        'g'
+      );
+      const contentRegex = new RegExp(
+        `content="\\/(?!${escapedBase.slice(1)}|test\\/|http|\\/\\/)`,
+        'g'
+      );
 
       for (const fileName of Object.keys(bundle)) {
-        if (fileName.endsWith('.html')) {
-          const asset = bundle[fileName];
-          if (asset.type === 'asset' && typeof asset.source === 'string') {
-            const hrefRegex = new RegExp(
-              `href="\\/(?!${escapedBase.slice(1)}|test\\/|http|\\/\\/)`,
-              'g'
-            );
-            const srcRegex = new RegExp(
-              `src="\\/(?!${escapedBase.slice(1)}|test\\/|http|\\/\\/)`,
-              'g'
-            );
-            const contentRegex = new RegExp(
-              `content="\\/(?!${escapedBase.slice(1)}|test\\/|http|\\/\\/)`,
-              'g'
-            );
-
-            asset.source = asset.source
-              .replace(hrefRegex, `href="${normalizedBase}`)
-              .replace(srcRegex, `src="${normalizedBase}`)
-              .replace(contentRegex, `content="${normalizedBase}`);
-          }
+        if (!fileName.endsWith('.html')) continue;
+        const diskPath = resolve(outDir, fileName);
+        if (!fs.existsSync(diskPath)) continue;
+        const source = fs.readFileSync(diskPath, 'utf8');
+        const updated = source
+          .replace(hrefRegex, `href="${normalizedBase}`)
+          .replace(srcRegex, `src="${normalizedBase}`)
+          .replace(contentRegex, `content="${normalizedBase}`);
+        if (updated !== source) {
+          fs.writeFileSync(diskPath, updated);
         }
       }
     },
@@ -378,6 +477,7 @@ export default defineConfig(() => {
           brandName: process.env.VITE_BRAND_NAME || '',
           brandLogo: process.env.VITE_BRAND_LOGO || '',
           footerText: process.env.VITE_FOOTER_TEXT || '',
+          appVersion: process.env.npm_package_version || 'Unknown',
         },
       }),
       languageRouterPlugin(),
@@ -420,10 +520,17 @@ export default defineConfig(() => {
     define: {
       __SIMPLE_MODE__: JSON.stringify(process.env.SIMPLE_MODE === 'true'),
       __BRAND_NAME__: JSON.stringify(process.env.VITE_BRAND_NAME || ''),
+      __DISABLED_TOOLS__: JSON.stringify(
+        (process.env.DISABLE_TOOLS || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      ),
     },
     resolve: {
       alias: {
         '@/types': resolve(__dirname, 'src/js/types/index.ts'),
+        '@': resolve(__dirname, 'src'),
         stream: 'stream-browserify',
         zlib: 'browserify-zlib',
       },
@@ -433,7 +540,7 @@ export default defineConfig(() => {
       exclude: ['coherentpdf', 'wasm-vips'],
     },
     server: {
-      host: true,
+      host: process.env.VITE_DEV_HOST || 'localhost',
       headers: {
         'Cross-Origin-Opener-Policy': 'same-origin',
         'Cross-Origin-Embedder-Policy': 'require-corp',
@@ -487,6 +594,7 @@ export default defineConfig(() => {
           'extract-pages': resolve(__dirname, 'src/pages/extract-pages.html'),
           'delete-pages': resolve(__dirname, 'src/pages/delete-pages.html'),
           'organize-pdf': resolve(__dirname, 'src/pages/organize-pdf.html'),
+          'overlay-pdf': resolve(__dirname, 'src/pages/overlay-pdf.html'),
           'page-numbers': resolve(__dirname, 'src/pages/page-numbers.html'),
           'add-page-labels': resolve(
             __dirname,
@@ -651,6 +759,15 @@ export default defineConfig(() => {
             __dirname,
             'src/pages/bates-numbering.html'
           ),
+        },
+        output: {
+          assetFileNames: (assetInfo) => {
+            const name = assetInfo.names?.[0] ?? '';
+            if (name.endsWith('.mjs')) {
+              return 'assets/[name]-[hash].js';
+            }
+            return 'assets/[name]-[hash][extname]';
+          },
         },
       },
     },

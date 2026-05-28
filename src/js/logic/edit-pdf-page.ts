@@ -4,15 +4,20 @@ import { showAlert, showLoader, hideLoader } from '../ui.js';
 import { formatBytes, downloadFile } from '../utils/helpers.js';
 import { makeUniqueFileKey } from '../utils/deduplicate-filename.js';
 import { batchDecryptIfNeeded } from '../utils/password-prompt.js';
+import { getEditorDisabledCategories } from '../utils/disabled-tools.js';
 
 const embedPdfWasmUrl = new URL(
   'embedpdf-snippet/dist/pdfium.wasm',
   import.meta.url
 ).href;
 
-let viewerInstance: any = null;
-let docManagerPlugin: any = null;
+import type { EmbedPdfContainer } from 'embedpdf-snippet';
+import type { DocManagerPlugin } from '@/types';
+
+let viewerInstance: EmbedPdfContainer | null = null;
+let docManagerPlugin: DocManagerPlugin | null = null;
 let isViewerInitialized = false;
+let currentFileName = 'document.pdf';
 const fileEntryMap = new Map<string, HTMLElement>();
 
 function resetViewer() {
@@ -124,13 +129,16 @@ async function handleFiles(files: FileList) {
 
     if (!isViewerInitialized) {
       const firstFile = decryptedFiles[0];
+      currentFileName = firstFile.name;
       const firstBuffer = await firstFile.arrayBuffer();
 
       pdfContainer.textContent = '';
       pdfWrapper.classList.remove('hidden');
 
       const { default: EmbedPDF } = await import('embedpdf-snippet');
+      const disabledCategories = getEditorDisabledCategories();
       viewerInstance = EmbedPDF.init({
+        disabledCategories,
         type: 'container',
         target: pdfContainer,
         worker: true,
@@ -145,33 +153,37 @@ async function handleFiles(files: FileList) {
       });
 
       const registry = await viewerInstance.registry;
-      docManagerPlugin = registry.getPlugin('document-manager').provides();
+      docManagerPlugin = registry
+        .getPlugin('document-manager')
+        .provides() as unknown as DocManagerPlugin;
 
-      docManagerPlugin.onDocumentClosed((data: any) => {
-        const docId = data?.id || data;
+      docManagerPlugin.onDocumentClosed((data: { id?: string }) => {
+        const docId = data?.id || '';
         removeFileEntry(docId);
       });
 
-      docManagerPlugin.onDocumentOpened((data: any) => {
-        const docId = data?.id;
-        const docKey = data?.name;
-        if (!docId) return;
-        const pendingEntry = fileDisplayArea.querySelector(
-          `[data-pending-name="${CSS.escape(docKey)}"]`
-        ) as HTMLElement;
-        if (pendingEntry) {
-          pendingEntry.removeAttribute('data-pending-name');
-          fileEntryMap.set(docId, pendingEntry);
-          const removeBtn = pendingEntry.querySelector(
-            '[data-remove-btn]'
+      docManagerPlugin.onDocumentOpened(
+        (data: { id?: string; name?: string }) => {
+          const docId = data?.id;
+          const docKey = data?.name;
+          if (!docId) return;
+          const pendingEntry = fileDisplayArea.querySelector(
+            `[data-pending-name="${CSS.escape(docKey)}"]`
           ) as HTMLElement;
-          if (removeBtn) {
-            removeBtn.onclick = () => {
-              docManagerPlugin.closeDocument(docId);
-            };
+          if (pendingEntry) {
+            pendingEntry.removeAttribute('data-pending-name');
+            fileEntryMap.set(docId, pendingEntry);
+            const removeBtn = pendingEntry.querySelector(
+              '[data-remove-btn]'
+            ) as HTMLElement;
+            if (removeBtn) {
+              removeBtn.onclick = () => {
+                docManagerPlugin.closeDocument(docId);
+              };
+            }
           }
         }
-      });
+      );
 
       addFileEntries(fileDisplayArea, decryptedFiles);
 
@@ -207,7 +219,7 @@ async function handleFiles(files: FileList) {
           const exportPlugin = registry.getPlugin('export').provides();
           const arrayBuffer = await exportPlugin.saveAsCopy().toPromise();
           const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
-          downloadFile(blob, 'edited-document.pdf');
+          downloadFile(blob, currentFileName);
         } catch (err) {
           console.error('Error downloading PDF:', err);
           showAlert('Error', 'Failed to download the edited PDF.');

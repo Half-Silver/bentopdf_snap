@@ -164,7 +164,7 @@ async function renderThumbnails() {
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     const ctx = canvas.getContext('2d');
-    await page.render({ canvasContext: ctx, viewport }).promise;
+    await page.render({ canvas: null, canvasContext: ctx, viewport }).promise;
 
     const wrapper = document.createElement('div');
     wrapper.className = 'relative cursor-pointer group';
@@ -267,12 +267,11 @@ async function deletePages() {
       new Uint8Array(srcBytes),
       deleteState.pagesToDelete
     );
-    const baseName = deleteState.file?.name.replace('.pdf', '') || 'document';
     downloadFile(
       new Blob([new Uint8Array(resultBytes)], {
         type: 'application/pdf',
       }),
-      `${baseName}_pages_removed.pdf`
+      deleteState.file?.name || 'document.pdf'
     );
 
     hideLoader();

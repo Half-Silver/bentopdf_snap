@@ -5,6 +5,7 @@ import type { SocketData } from '../types';
 import { requirePdfInput, processBatch } from '../types';
 import { initializeQpdf } from '../../utils/helpers.js';
 import { loadPdfDocument } from '../../utils/load-pdf-document.js';
+import { wfError } from '../errors';
 
 export class EncryptNode extends BaseWorkflowNode {
   readonly category = 'Secure PDF' as const;
@@ -39,13 +40,12 @@ export class EncryptNode extends BaseWorkflowNode {
 
     const userPassword = getText('userPassword');
     const ownerPassword = getText('ownerPassword') || userPassword;
-    if (!userPassword)
-      throw new Error('User password is required for encryption');
+    if (!userPassword) throw new Error(wfError('encryptUserPasswordRequired'));
 
     return {
       pdf: await processBatch(pdfInputs, async (input) => {
         const qpdf = await initializeQpdf();
-        const uid = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        const uid = `${Date.now()}_${crypto.randomUUID().slice(0, 7)}`;
         const inputPath = `/tmp/input_encrypt_${uid}.pdf`;
         const outputPath = `/tmp/output_encrypt_${uid}.pdf`;
 

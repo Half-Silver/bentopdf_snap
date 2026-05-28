@@ -226,9 +226,9 @@ async function generatePreview() {
       const ctx = offscreen.getContext('2d')!;
 
       await page.render({
-        canvasContext: ctx as any,
+        canvasContext: ctx as unknown as CanvasRenderingContext2D,
         viewport: viewport,
-        canvas: offscreen as any,
+        canvas: offscreen as unknown as HTMLCanvasElement,
       }).promise;
 
       const bitmap = await createImageBitmap(offscreen);
@@ -524,12 +524,9 @@ async function createBooklet() {
     }
 
     const pdfBytes = await outputDoc.save();
-    const originalName =
-      pageState.file?.name.replace(/\.pdf$/i, '') || 'document';
-
     downloadFile(
       new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' }),
-      `${originalName}_booklet.pdf`
+      pageState.file?.name || 'document.pdf'
     );
 
     showAlert(

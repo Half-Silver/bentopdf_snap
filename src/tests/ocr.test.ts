@@ -1,13 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   createConfiguredTesseractWorker,
   getPDFDocument,
+  loadPdfDocument,
   getFontForLanguage,
   parseHocrDocument,
 } = vi.hoisted(() => ({
   createConfiguredTesseractWorker: vi.fn(),
   getPDFDocument: vi.fn(),
+  loadPdfDocument: vi.fn(),
   getFontForLanguage: vi.fn(),
   parseHocrDocument: vi.fn(),
 }));
@@ -21,17 +23,22 @@ const mockWorker = {
 const mockPdfPage = {
   getViewport: vi.fn(() => ({ width: 200, height: 100 })),
   render: vi.fn(() => ({ promise: Promise.resolve() })),
+  cleanup: vi.fn(),
 };
 
 const mockPdfOutputPage = {
   drawImage: vi.fn(),
+  drawPage: vi.fn(),
   drawText: vi.fn(),
+  setRotation: vi.fn(),
 };
 
 const mockPdfDoc = {
   registerFontkit: vi.fn(),
   embedFont: vi.fn(async () => ({ widthOfTextAtSize: vi.fn(() => 12) })),
   addPage: vi.fn(() => mockPdfOutputPage),
+  copyPages: vi.fn(async () => [mockPdfOutputPage]),
+  embedPage: vi.fn(async () => ({ width: 200, height: 100 })),
   embedPng: vi.fn(async () => ({ id: 'png' })),
   save: vi.fn(async () => new Uint8Array([1, 2, 3])),
 };
@@ -42,6 +49,10 @@ vi.mock('../js/utils/tesseract-runtime', () => ({
 
 vi.mock('../js/utils/helpers.js', () => ({
   getPDFDocument,
+}));
+
+vi.mock('../js/utils/load-pdf-document.js', () => ({
+  loadPdfDocument,
 }));
 
 vi.mock('../js/utils/font-loader.js', () => ({
@@ -77,6 +88,7 @@ describe('performOcr', () => {
   beforeEach(() => {
     createConfiguredTesseractWorker.mockReset();
     getPDFDocument.mockReset();
+    loadPdfDocument.mockReset();
     getFontForLanguage.mockReset();
     parseHocrDocument.mockReset();
 
@@ -90,10 +102,17 @@ describe('performOcr', () => {
     mockPdfDoc.registerFontkit.mockClear();
     mockPdfDoc.embedFont.mockClear();
     mockPdfDoc.addPage.mockClear();
+    mockPdfDoc.embedPage.mockClear();
     mockPdfDoc.embedPng.mockClear();
     mockPdfDoc.save.mockClear();
 
     createConfiguredTesseractWorker.mockResolvedValue(mockWorker);
+    loadPdfDocument.mockResolvedValue({
+      getPage: vi.fn(() => ({
+        width: 200,
+        height: 100,
+      })),
+    });
     getPDFDocument.mockReturnValue({
       promise: Promise.resolve({
         numPages: 1,
@@ -159,27 +178,31 @@ describe('performOcr', () => {
       expect.any(Function)
     );
     expect(mockWorker.setParameters).toHaveBeenCalledWith({
-      tessjs_create_hocr: '1',
       tessedit_pageseg_mode: '3',
     });
     expect(mockWorker.recognize).toHaveBeenCalledTimes(1);
     expect(mockWorker.terminate).toHaveBeenCalledTimes(1);
     expect(result.fullText).toContain('Recognized text');
     expect(result.pdfBytes).toBeInstanceOf(Uint8Array);
+    expect(result.warnings).toEqual([]);
   });
 
-  it('terminates the Tesseract worker when OCR fails', async () => {
+  it('records a warning and still terminates the worker when OCR fails on a page', async () => {
     mockWorker.recognize.mockRejectedValueOnce(new Error('ocr failed'));
 
-    await expect(
-      performOcr(new Uint8Array([1, 2, 3]), {
-        language: 'eng',
-        resolution: 2,
-        binarize: false,
-        whitelist: '',
-      })
-    ).rejects.toThrow('ocr failed');
+    const result = await performOcr(new Uint8Array([1, 2, 3]), {
+      language: 'eng',
+      resolution: 2,
+      binarize: false,
+      whitelist: '',
+    });
 
     expect(mockWorker.terminate).toHaveBeenCalledTimes(1);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toMatchObject({
+      page: 1,
+      kind: 'recognize-error',
+    });
+    expect(result.warnings[0].message).toContain('ocr failed');
   });
 });

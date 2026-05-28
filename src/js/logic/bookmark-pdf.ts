@@ -7,7 +7,6 @@ import '../../css/bookmark.css';
 import { initializeGlobalShortcuts } from '../utils/shortcuts-init.js';
 import {
   truncateFilename,
-  getPDFDocument,
   formatBytes,
   downloadFile,
   escapeHtml,
@@ -46,7 +45,6 @@ let isPickingDestination = false;
 let currentPickingCallback: DestinationCallback | null = null;
 let destinationMarker: HTMLDivElement | null = null;
 let savedModalOverlay: HTMLDivElement | null = null;
-let savedModal: HTMLDivElement | null = null;
 let currentViewport: PageViewport | null = null;
 let currentZoom = 1.0;
 const fileInput = document.getElementById(
@@ -234,22 +232,22 @@ function showInputModal(
         if (field.type === 'text') {
           return `
   <div class="mb-4">
-    <label class="block text-sm font-medium text-gray-700 mb-2">${field.label}</label>
+    <label class="block text-sm font-medium text-gray-700 mb-2">${escapeHTML(field.label)}</label>
       <input type="text" id="modal-${field.name}" value="${escapeHTML(String(defaultValues[field.name] || ''))}"
 class="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
-placeholder="${field.placeholder || ''}" />
+placeholder="${escapeHTML(field.placeholder || '')}" />
   </div>
     `;
         } else if (field.type === 'select') {
           return `
   <div class="mb-4">
-    <label class="block text-sm font-medium text-gray-700 mb-2">${field.label}</label>
+    <label class="block text-sm font-medium text-gray-700 mb-2">${escapeHTML(field.label)}</label>
       <select id="modal-${field.name}" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900">
         ${field.options
           .map(
             (opt) => `
-                                        <option value="${opt.value}" ${defaultValues[field.name] === opt.value ? 'selected' : ''}>
-                                            ${opt.label}
+                                        <option value="${escapeHTML(opt.value)}" ${defaultValues[field.name] === opt.value ? 'selected' : ''}>
+                                            ${escapeHTML(opt.label)}
                                         </option>
                                     `
           )
@@ -263,7 +261,7 @@ placeholder="${field.placeholder || ''}" />
             defaultValues.destX !== null && defaultValues.destX !== undefined;
           return `
   <div class="mb-4">
-    <label class="block text-sm font-medium text-gray-700 mb-2">${field.label}</label>
+    <label class="block text-sm font-medium text-gray-700 mb-2">${escapeHTML(field.label)}</label>
       <div class="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
         <div class="flex items-center gap-2">
           <label class="flex items-center gap-1 text-xs">
@@ -315,7 +313,7 @@ class="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900" />
         } else if (field.type === 'preview') {
           return `
         <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-2">${field.label}</label>
+          <label class="block text-sm font-medium text-gray-700 mb-2">${escapeHTML(field.label)}</label>
             <div id="modal-preview" class="style-preview bg-gray-50">
               <span id="preview-text" style="font-size: 16px;">Preview Text</span>
                 </div>
@@ -328,7 +326,7 @@ class="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900" />
 
     modal.innerHTML = `
                 <div class="p-6">
-                  <h3 class="text-xl font-bold text-gray-800 mb-4">${title}</h3>
+                  <h3 class="text-xl font-bold text-gray-800 mb-4">${escapeHTML(title)}</h3>
                     <div class="mb-6">
                       ${fieldsHTML}
 </div>
@@ -463,7 +461,6 @@ class="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900" />
     if (pickDestBtn) {
       pickDestBtn.addEventListener('click', () => {
         savedModalOverlay = overlay;
-        savedModal = modal;
         overlay.style.display = 'none';
 
         startDestinationPicking((page: number, pdfX: number, pdfY: number) => {
@@ -699,7 +696,6 @@ function cancelDestinationPicking(): void {
   if (savedModalOverlay) {
     savedModalOverlay.style.display = '';
     savedModalOverlay = null;
-    savedModal = null;
   }
 }
 
@@ -824,6 +820,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function showConfirmModal(message: string): Promise<boolean> {
   return new Promise((resolve) => {
+    const previousActiveEl = document.activeElement as HTMLElement | null;
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
 
@@ -833,7 +830,7 @@ function showConfirmModal(message: string): Promise<boolean> {
     modal.innerHTML = `
   <div class="p-6">
     <h3 class="text-xl font-bold text-gray-800 mb-4">Confirm Action</h3>
-      <p class="text-gray-600 mb-6">${message}</p>
+      <p class="text-gray-600 mb-6">${escapeHTML(message)}</p>
         <div class="flex gap-2 justify-end">
           <button id="modal-cancel" class="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700">Cancel</button>
             <button id="modal-confirm" class="px-4 py-2 rounded btn-gradient text-white">Confirm</button>
@@ -844,19 +841,30 @@ function showConfirmModal(message: string): Promise<boolean> {
     overlay.appendChild(modal);
     modalContainer?.appendChild(overlay);
 
-    modal.querySelector('#modal-cancel')?.addEventListener('click', () => {
+    const modalCancelBtn = modal.querySelector(
+      '#modal-cancel'
+    ) as HTMLButtonElement | null;
+    const modalConfirmBtn = modal.querySelector(
+      '#modal-confirm'
+    ) as HTMLButtonElement | null;
+    modalCancelBtn?.focus();
+
+    modalCancelBtn?.addEventListener('click', () => {
       modalContainer?.removeChild(overlay);
+      previousActiveEl?.focus();
       resolve(false);
     });
 
-    modal.querySelector('#modal-confirm')?.addEventListener('click', () => {
+    modalConfirmBtn?.addEventListener('click', () => {
       modalContainer?.removeChild(overlay);
+      previousActiveEl?.focus();
       resolve(true);
     });
 
     overlay.addEventListener('click', (e: MouseEvent) => {
       if (e.target === overlay) {
         modalContainer?.removeChild(overlay);
+        previousActiveEl?.focus();
         resolve(false);
       }
     });
@@ -865,6 +873,7 @@ function showConfirmModal(message: string): Promise<boolean> {
 
 function showAlertModal(title: string, message: string): Promise<boolean> {
   return new Promise((resolve) => {
+    const previousActiveEl = document.activeElement as HTMLElement | null;
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
 
@@ -873,8 +882,8 @@ function showAlertModal(title: string, message: string): Promise<boolean> {
 
     modal.innerHTML = `
               <div class="p-6">
-                <h3 class="text-xl font-bold text-gray-800 mb-4">${title}</h3>
-                  <p class="text-gray-600 mb-6">${message}</p>
+                <h3 class="text-xl font-bold text-gray-800 mb-4">${escapeHTML(title)}</h3>
+                  <p class="text-gray-600 mb-6">${escapeHTML(message)}</p>
                     <div class="flex justify-end">
                       <button id="modal-ok" class="px-4 py-2 rounded btn-gradient text-white">OK</button>
                         </div>
@@ -884,14 +893,19 @@ function showAlertModal(title: string, message: string): Promise<boolean> {
     overlay.appendChild(modal);
     modalContainer?.appendChild(overlay);
 
-    modal.querySelector('#modal-ok')?.addEventListener('click', () => {
+    const okBtn = modal.querySelector('#modal-ok') as HTMLButtonElement | null;
+    okBtn?.focus();
+
+    okBtn?.addEventListener('click', () => {
       modalContainer?.removeChild(overlay);
+      previousActiveEl?.focus();
       resolve(true);
     });
 
     overlay.addEventListener('click', (e: MouseEvent) => {
       if (e.target === overlay) {
         modalContainer?.removeChild(overlay);
+        previousActiveEl?.focus();
         resolve(true);
       }
     });
@@ -1299,7 +1313,7 @@ jsonInput?.addEventListener('change', async (e: Event) => {
       'JSON Loaded',
       'Loaded bookmarks from JSON. Now upload your PDF.'
     );
-  } catch (err) {
+  } catch {
     await showAlertModal('Error', 'Invalid JSON format');
   }
 });
@@ -2000,7 +2014,7 @@ jsonImportHidden?.addEventListener('change', async (e: Event) => {
     saveState();
     renderBookmarkTree();
     await showAlertModal('Success', 'Bookmarks imported from JSON!');
-  } catch (err) {
+  } catch {
     await showAlertModal('Error', 'Invalid JSON format');
   }
 
@@ -2292,7 +2306,7 @@ downloadBtn?.addEventListener('click', async () => {
     const blob = new Blob([new Uint8Array(pdfBytes)], {
       type: 'application/pdf',
     });
-    downloadFile(blob, `${originalFileName}-bookmarked.pdf`);
+    downloadFile(blob, `${originalFileName}.pdf`);
 
     await showAlertModal('Success', 'PDF saved successfully!');
 

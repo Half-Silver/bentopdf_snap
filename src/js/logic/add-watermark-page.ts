@@ -1010,12 +1010,15 @@ async function applyWatermark() {
 
     downloadFile(
       new Blob([new Uint8Array(resultBytes)], { type: 'application/pdf' }),
-      'watermarked.pdf'
+      pageState.file?.name || 'document.pdf'
     );
     showAlert('Success', 'Watermark added successfully!', 'success');
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error(e);
-    showAlert('Error', e.message || 'Could not add the watermark.');
+    showAlert(
+      'Error',
+      e instanceof Error ? e.message : 'Could not add the watermark.'
+    );
   } finally {
     hideLoader();
   }

@@ -6,6 +6,14 @@ BentoPDF can be self-hosted on your own infrastructure. This guide covers variou
 
 The fastest way to self-host BentoPDF:
 
+> [!TIP]
+> BentoPDF ships in two builds:
+>
+> - **Self-Hosted build** — `ghcr.io/alam00000/bentopdf-simple:latest`. Every PDF tool, **without** the marketing chrome (no hero, FAQ, testimonials, footer). Use this for internal/team/organization deployments. It is **not** a feature-reduced "lite" version.
+> - **Commercial build** — `ghcr.io/alam00000/bentopdf:latest`. The full marketing site, used by bentopdf.com itself and by commercial license holders running public-facing deployments.
+>
+> If in doubt: pull the Self-Hosted build.
+
 > [!IMPORTANT]
 > Office file conversion requires `SharedArrayBuffer`, which means the app must be both cross-origin isolated and served from a secure context. The official image already sends the required COOP/COEP headers, but browsers still disable `SharedArrayBuffer` on plain HTTP local-network origins such as `http://192.168.x.x`.
 >
@@ -13,10 +21,10 @@ The fastest way to self-host BentoPDF:
 
 ```bash
 # Docker
-docker run -d -p 3000:8080 ghcr.io/alam00000/bentopdf:latest
+docker run -d -p 3000:8080 ghcr.io/alam00000/bentopdf-simple:latest
 
 # Podman
-podman run -d -p 3000:8080 ghcr.io/alam00000/bentopdf:latest
+podman run -d -p 3000:8080 ghcr.io/alam00000/bentopdf-simple:latest
 ```
 
 Or with Docker Compose / Podman Compose:
@@ -25,7 +33,7 @@ Or with Docker Compose / Podman Compose:
 # docker-compose.yml
 services:
   bentopdf:
-    image: ghcr.io/alam00000/bentopdf:latest
+    image: ghcr.io/alam00000/bentopdf-simple:latest
     ports:
       - '3000:8080'
     restart: unless-stopped
@@ -45,7 +53,7 @@ Run BentoPDF as a systemd service. Create `~/.config/containers/systemd/bentopdf
 
 ```ini
 [Container]
-Image=ghcr.io/alam00000/bentopdf:latest
+Image=ghcr.io/alam00000/bentopdf-simple:latest
 ContainerName=bentopdf
 PublishPort=3000:8080
 AutoUpdate=registry
@@ -78,27 +86,70 @@ npm run build
 
 ## Configuration Options
 
-### Simple Mode
+### Self-Hosted build (Simple Mode)
 
-Simple Mode is designed for internal organizational use where you want to hide all branding and marketing content, showing only the essential PDF tools.
+The Self-Hosted build (the `bentopdf-simple` image, also called Simple Mode) is **functionally identical** to the Commercial build — every PDF tool is present and behaves the same. It just hides the marketing chrome that only makes sense on bentopdf.com itself or on a commercial public-facing deployment. **It is not a feature-reduced or "lite" version.**
 
-**What Simple Mode hides:**
+**What the Self-Hosted build hides** (cosmetic only — no PDF features are removed):
 
-- Navigation bar
-- Hero section with marketing content
-- Features, FAQ, testimonials sections
-- Footer
+- Navigation bar, hero section, features section, FAQ, testimonials, footer
 - Updates page title to "PDF Tools"
 
-```bash
-# Build with Simple Mode
-SIMPLE_MODE=true npm run build
+**What the Self-Hosted build keeps** (everything that actually does PDF work):
 
-# Or use the pre-built Docker image
-docker run -p 3000:8080 bentopdfteam/bentopdf-simple:latest
+- Every PDF tool (merge, split, edit, sign, OCR, Office conversion, etc.)
+- Custom branding support, all build-time and runtime config
+
+The Commercial build (`ghcr.io/alam00000/bentopdf:latest`) is what powers bentopdf.com itself and is used by commercial license holders running public-facing deployments — it adds the hero, FAQ, testimonials, and footer that wouldn't make sense on an internal tool.
+
+If you're self-hosting BentoPDF for your team, organization, or as an internal tool, pull the Self-Hosted build:
+
+```bash
+# Use the pre-built image (recommended)
+docker run -p 3000:8080 ghcr.io/alam00000/bentopdf-simple:latest
+
+# Or build it yourself
+SIMPLE_MODE=true npm run build
 ```
 
 See [SIMPLE_MODE.md](https://github.com/alam00000/bentopdf/blob/main/SIMPLE_MODE.md) for full details.
+
+### Commercial build (public-facing deployments with your own brand)
+
+The Commercial build (the `bentopdf` image — no `-simple` suffix) is what powers bentopdf.com itself. It includes the full marketing site (hero, features, FAQ, testimonials, footer) on top of every PDF tool. Use this build when you want to **deploy BentoPDF as a public-facing PDF service under your own brand** — for example:
+
+- You're running BentoPDF as a hosted SaaS for end-users on your own domain
+- You want the landing-page experience (marketing sections + tools), not just the bare tool surface
+- You're a commercial license holder embedding BentoPDF into a commercial product
+
+**Run it as-is** (BentoPDF branding — useful to preview the build):
+
+```bash
+docker run -p 3000:8080 ghcr.io/alam00000/bentopdf:latest
+```
+
+**Build with your own brand** (the typical commercial workflow):
+
+```bash
+docker build \
+  --build-arg VITE_BRAND_NAME="AcmePDF" \
+  --build-arg VITE_BRAND_LOGO="images/acme-logo.svg" \
+  --build-arg VITE_FOOTER_TEXT="© 2026 Acme Corp. All rights reserved." \
+  -t acmepdf .
+
+docker run -p 3000:8080 acmepdf
+```
+
+Every other build-time option (`BASE_URL`, `VITE_DEFAULT_LANGUAGE`, `DISABLE_TOOLS`, WASM URL overrides, etc.) works the same way it does on the Self-Hosted build.
+
+::: warning Licensing
+Running the Commercial build is allowed under either of BentoPDF's two license options:
+
+- **AGPL-3.0** (free) — allowed if your deployment publishes its full source code under AGPL, including any branding modifications and surrounding business logic.
+- **Commercial license** ($79 lifetime) — required for closed-source / proprietary deployments where you don't open-source your branding fork or business code.
+
+See the [Licensing page](https://bentopdf.com/licensing.html) for the full comparison. AGPL-licensed WASM modules (PyMuPDF, Ghostscript, CoherentPDF) load from a CDN at runtime, so they don't enter your image and don't change your licensing posture.
+:::
 
 ### Base URL
 
@@ -138,6 +189,36 @@ docker build \
 
 Branding works in both full mode and Simple Mode, and can be combined with all other build-time options (`BASE_URL`, `SIMPLE_MODE`, `VITE_DEFAULT_LANGUAGE`).
 
+### Disabling Specific Tools
+
+Hide individual tools for compliance or security. Disabled tools are removed from the homepage, search, shortcuts, workflow builder, and direct URL access.
+
+Tool IDs are the page URL without `.html` — open any tool and look at the URL (e.g., `edit-pdf`, `sign-pdf`, `encrypt-pdf`).
+
+**Build-time** (baked into the bundle):
+
+```bash
+DISABLE_TOOLS="edit-pdf,sign-pdf" npm run build
+```
+
+**Runtime** (no rebuild needed — mount a `config.json`):
+
+```json
+{
+  "disabledTools": ["edit-pdf", "sign-pdf"]
+}
+```
+
+```bash
+docker run -d -p 3000:8080 \
+  -v ./config.json:/usr/share/nginx/html/config.json:ro \
+  ghcr.io/alam00000/bentopdf-simple:latest
+```
+
+Both methods can be combined — the lists are merged.
+
+You can also disable specific features inside the PDF Editor (e.g., redaction) without disabling the entire tool by adding `editorDisabledCategories` to `config.json`. See the [Docker guide](/self-hosting/docker#disabling-editor-features) for the full list of categories.
+
 ## Deployment Guides
 
 Choose your platform:
@@ -152,6 +233,64 @@ Choose your platform:
 - [Docker](/self-hosting/docker)
 - [Kubernetes](/self-hosting/kubernetes)
 - [CORS Proxy](/self-hosting/cors-proxy) - Required for digital signatures
+
+## Common Issues
+
+### Word / ODT / Excel / PowerPoint to PDF Hangs (SharedArrayBuffer Unavailable)
+
+**Symptom**: LibreOffice-based document conversions (Word, ODT, Excel, PowerPoint to PDF) hang at ~55% or fail to start. The browser console may show:
+
+> `ReferenceError: SharedArrayBuffer is not defined`
+
+…or `window.crossOriginIsolated` reports `false`, or the WASM compilation reports `expected magic word 00 61 73 6d, found 1f 8b 08 08`.
+
+**Cause**: LibreOffice WASM requires `SharedArrayBuffer`, which the browser only enables when the page is **cross-origin isolated** AND served from a **secure context**. That means two things must be true:
+
+1. Every response includes both headers:
+   - `Cross-Origin-Embedder-Policy: require-corp`
+   - `Cross-Origin-Opener-Policy: same-origin`
+2. The page is served from `https://...` or `http://localhost`. Plain HTTP on a LAN IP (e.g. `http://192.168.x.x`) does NOT count as secure — browsers disable `SharedArrayBuffer` there.
+
+The `00 61 73 6d / 1f 8b 08 08` mismatch is a separate sub-symptom: the pre-compressed `.wasm.gz` / `.data.gz` files are missing the `Content-Encoding: gzip` response header, so the browser receives raw gzip bytes instead of decompressed WASM.
+
+**Fix**: see your platform-specific deployment guide for the exact configuration:
+
+- [Nginx →](/self-hosting/nginx#word-odt-excel-to-pdf-not-working)
+- [Apache →](/self-hosting/apache#word-odt-excel-to-pdf-not-working)
+- [AWS S3 + CloudFront →](/self-hosting/aws#step-3b-response-headers-policy-required-for-libreoffice-wasm)
+- [Cloudflare Pages →](/self-hosting/cloudflare#configuration-file) (`_headers` file)
+- [Netlify →](/self-hosting/netlify#word-odt-excel-to-pdf-stuck-at-55) (`netlify.toml`)
+- [Vercel →](/self-hosting/vercel#word-odt-excel-to-pdf-not-working) (`vercel.json`)
+- [Hostinger →](/self-hosting/hostinger#libreoffice-tools-not-working) (`.htaccess`)
+- [Kubernetes →](/self-hosting/kubernetes#ensuring-the-sharedarraybuffer-headers-still-work-ingress-gateway)
+- **Docker**: handled automatically by the bundled nginx config — no action needed.
+
+**Verify**: open DevTools Console on any BentoPDF page and run:
+
+```js
+console.log(window.crossOriginIsolated); // should be true
+console.log(typeof SharedArrayBuffer); // should be "function"
+```
+
+If the page is HTTPS or `http://localhost` AND both COEP/COOP headers are present on every response, both checks pass. If you're on `http://192.168.x.x` or another non-loopback HTTP origin, terminate it with HTTPS — there is no header-only fix.
+
+### `.mjs` Files Served as `application/octet-stream`
+
+**Symptom**: Sign PDF / Form Filler / certain other tools show a blank viewer or fail to load. The browser console reports:
+
+> `Failed to load module script: The server responded with a non-JavaScript MIME type of "application/octet-stream". Strict MIME type checking is enforced for module scripts per HTML spec.`
+
+**Cause**: Your web server or reverse proxy doesn't have a MIME-type mapping for `.mjs` files (the bundled PDF viewer ships ES modules with that extension). Many stock server configs default to `application/octet-stream` for unrecognized extensions, which browsers refuse to execute as ES modules.
+
+**Fix**: see your platform-specific deployment guide for the exact snippet:
+
+- [Nginx →](/self-hosting/nginx#sign-pdf-or-form-filler-shows-a-blank-viewer-mjs-mime-error)
+- [Apache →](/self-hosting/apache#sign-pdf-or-form-filler-shows-a-blank-viewer-mjs-mime-error)
+- [AWS S3 + CloudFront →](/self-hosting/aws#step-2-build-and-upload) (see `aws s3 cp ... --include "*.mjs"`)
+- [Kubernetes →](/self-hosting/kubernetes#mjs-mime-type-errors-sign-pdf-form-filler-iframe-blank)
+- **Docker, Vercel, Netlify, Cloudflare Pages, Hostinger**: handled automatically — no action needed.
+
+**Verify**: open DevTools → Network tab, find the failing `.mjs` request, check the `Content-Type` response header. It should be `application/javascript`. If it's still `application/octet-stream`, an outer reverse proxy or CDN may be re-sniffing the type — check each layer in your serving chain.
 
 ## WASM Configuration (AGPL Components)
 
@@ -173,8 +312,8 @@ These are set in `.env.production` and baked into the build:
 
 ```bash
 VITE_WASM_PYMUPDF_URL=https://cdn.jsdelivr.net/npm/@bentopdf/pymupdf-wasm@0.11.16/
-VITE_WASM_GS_URL=https://cdn.jsdelivr.net/npm/@bentopdf/gs-wasm/assets/
-VITE_WASM_CPDF_URL=https://cdn.jsdelivr.net/npm/coherentpdf/dist/
+VITE_WASM_GS_URL=https://cdn.jsdelivr.net/npm/@bentopdf/gs-wasm@0.1.1/assets/
+VITE_WASM_CPDF_URL=https://cdn.jsdelivr.net/npm/coherentpdf@2.5.5/dist/
 VITE_TESSERACT_WORKER_URL=
 VITE_TESSERACT_CORE_URL=
 VITE_TESSERACT_LANG_URL=

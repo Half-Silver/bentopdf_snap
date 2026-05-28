@@ -34,9 +34,19 @@ chown -R "$PUID:$PGID" \
     /usr/share/nginx/html \
     /etc/nginx/nginx.conf
 
+PORT=${PORT:-8080}
+if [ "$PORT" != "8080" ]; then
+    echo "Changing Nginx listen port to $PORT"
+    sed -i "s/listen 8080/listen $PORT/g; s/listen \[::\]:8080/listen [::]:$PORT/g" /etc/nginx/nginx.conf
+fi
+
 if [ "$DISABLE_IPV6" = "true" ]; then
     echo "Disabling Nginx IPv6 listener"
     sed -i '/^[[:space:]]*listen[[:space:]]*\[::\]:[0-9]*/s/^/#/' /etc/nginx/nginx.conf
+fi
+
+if [ "${ROBOTS_NOINDEX:-false}" = "true" ] && [ -x /usr/local/bin/bentopdf-noindex.sh ]; then
+    NOINDEX_HTML_ROOT=/usr/share/nginx/html /usr/local/bin/bentopdf-noindex.sh || true
 fi
 
 exec su-exec "$PUID:$PGID" "$@"

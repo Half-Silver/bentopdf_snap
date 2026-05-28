@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <!-- Primary Meta Tags -->
-    <title>Form Filler Online Free - Form Filler Tool | BentoPDF</title>
     <meta
       name="title"
       content="Form Filler Online Free - Form Filler Tool | BentoPDF"
@@ -22,7 +21,7 @@
     />
 
     <!-- Canonical URL -->
-    <link rel="canonical" href="https://www.bentopdf.com/form-filler.html" />
+    <link rel="canonical" href="https://www.bentopdf.com/form-filler" />
 
     <!-- Open Graph / Facebook / LinkedIn -->
     <meta property="og:type" content="website" />
@@ -122,7 +121,10 @@
         >
           PDF Form Filler
         </h1>
-        <p class="text-gray-400 mb-4">
+        <p
+          class="text-gray-400 mb-4"
+          data-i18n="tools:pdfFormFiller.uploadHint"
+        >
           Upload a PDF with form fields. Fill them directly in the viewer below,
           then click the button to save and download the filled form. Also
           supports XFA forms.
@@ -132,12 +134,16 @@
           class="mb-6 p-3 bg-blue-900/20 border border-blue-700/50 rounded-lg"
         >
           <p class="text-sm text-blue-300">
-            <strong>Note on XFA Forms:</strong> XFA (XML Forms Architecture) is
-            a legacy format that's only supported by certain PDF viewers like
-            BentoPDF and Firefox. If you open an XFA PDF in other software and
-            see blank pages or no form fields, it means that viewer doesn't
-            support XFA. To view and fill XFA forms properly, use Firefox or
-            BentoPDF's Form Filler.
+            <strong data-i18n="tools:pdfFormFiller.xfaNoteTitle"
+              >Note on XFA Forms:</strong
+            >
+            <span data-i18n="tools:pdfFormFiller.xfaNoteDescription"
+              >XFA (XML Forms Architecture) is a legacy format that's only
+              supported by certain PDF viewers like BentoPDF and Firefox. If you
+              open an XFA PDF in other software and see blank pages or no form
+              fields, it means that viewer doesn't support XFA. To view and fill
+              XFA forms properly, use Firefox or BentoPDF's Form Filler.</span
+            >
           </p>
         </div>
 
@@ -383,7 +389,6 @@
     <script type="module" src="/src/js/utils/lucide-init.ts"></script>
     <script type="module" src="/src/js/utils/full-width.ts"></script>
     <script type="module" src="/src/js/utils/simple-mode-footer.ts"></script>
-    <script type="module" src="/src/version.ts"></script>
     <script type="module" src="/src/js/logic/form-filler-page.ts"></script>
     <script type="module" src="/src/js/mobileMenu.ts"></script>
     <script type="module" src="/src/js/main.ts"></script>
@@ -400,11 +405,6 @@
           "@type": "Offer",
           "price": "0",
           "priceCurrency": "USD"
-        },
-        "aggregateRating": {
-          "@type": "AggregateRating",
-          "ratingValue": "4.9",
-          "ratingCount": "3881"
         }
       }
     </script>

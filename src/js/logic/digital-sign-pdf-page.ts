@@ -190,8 +190,8 @@ function initializePage(): void {
         const validTypes = ['image/png', 'image/jpeg', 'image/webp'];
         if (!validTypes.includes(file.type)) {
           showAlert(
-            'Invalid Image',
-            'Please select a PNG, JPG, or WebP image.'
+            t('tools:digitalSignPdf.invalidImageTitle'),
+            t('tools:digitalSignPdf.invalidImageMessage')
           );
           return;
         }
@@ -203,8 +203,15 @@ function initializePage(): void {
 
         if (sigImageThumb && sigImagePreview) {
           const url = URL.createObjectURL(file);
-          sigImageThumb.src = url;
-          sigImagePreview.classList.remove('hidden');
+          try {
+            const parsed = new URL(url);
+            if (parsed.protocol === 'blob:') {
+              sigImageThumb.src = parsed.href;
+              sigImagePreview.classList.remove('hidden');
+            }
+          } catch {
+            console.warn('Invalid blob URL for signature preview');
+          }
         }
       }
     });
@@ -242,7 +249,10 @@ async function handlePdfFile(file: File): Promise<void> {
     file.type !== 'application/pdf' &&
     !file.name.toLowerCase().endsWith('.pdf')
   ) {
-    showAlert('Invalid File', 'Please select a PDF file.');
+    showAlert(
+      t('tools:digitalSignPdf.invalidFileTitle'),
+      t('tools:digitalSignPdf.invalidFileMessage')
+    );
     return;
   }
 
@@ -307,7 +317,7 @@ async function updatePdfDisplay(): Promise<void> {
     state.pdfFile = result.file;
     state.pdfBytes = new Uint8Array(result.bytes);
     nameSpan.textContent = result.file.name;
-    metaSpan.textContent = `${formatBytes(result.file.size)} • ${result.pdf.numPages} pages`;
+    metaSpan.textContent = `${formatBytes(result.file.size)} • ${t('tools:digitalSignPdf.pageCount', { count: result.pdf.numPages })}`;
     result.pdf.destroy();
   }
 }
@@ -366,8 +376,8 @@ async function handleCertFile(file: File): Promise<void> {
 
   if (!hasValidExtension) {
     showAlert(
-      'Invalid Certificate',
-      'Please select a .pfx, .p12, or .pem certificate file.'
+      t('tools:digitalSignPdf.invalidCertificateTitle'),
+      t('tools:digitalSignPdf.invalidCertificateMessage')
     );
     return;
   }
@@ -386,7 +396,7 @@ async function handleCertFile(file: File): Promise<void> {
 
       if (isEncrypted) {
         showPasswordSection();
-        updatePasswordLabel('Private Key Password');
+        updatePasswordLabel(t('tools:digitalSignPdf.privateKeyPassword'));
       } else {
         state.certData = parseCombinedPem(pemContent);
         updateCertInfo();
@@ -394,22 +404,21 @@ async function handleCertFile(file: File): Promise<void> {
 
         const certStatus = getElement<HTMLDivElement>('cert-status');
         if (certStatus) {
-          certStatus.innerHTML =
-            'Certificate loaded <i data-lucide="check" class="inline w-4 h-4"></i>';
+          certStatus.innerHTML = `${t('tools:digitalSignPdf.certificateLoaded')} <i data-lucide="check" class="inline w-4 h-4"></i>`;
           createIcons({ icons });
           certStatus.className = 'text-xs text-green-400';
         }
       }
-    } catch (error) {
+    } catch {
       const certStatus = getElement<HTMLDivElement>('cert-status');
       if (certStatus) {
-        certStatus.textContent = 'Failed to parse PEM file';
+        certStatus.textContent = t('tools:digitalSignPdf.failedParsePem');
         certStatus.className = 'text-xs text-red-400';
       }
     }
   } else {
     showPasswordSection();
-    updatePasswordLabel('Certificate Password');
+    updatePasswordLabel(t('tools:digitalSignPdf.certPassword'));
   }
 
   hideSignatureOptions();
@@ -437,7 +446,7 @@ function updateCertDisplay(): void {
   const metaSpan = document.createElement('div');
   metaSpan.className = 'text-xs text-gray-400';
   metaSpan.id = 'cert-status';
-  metaSpan.textContent = 'Enter password to unlock';
+  metaSpan.textContent = t('tools:digitalSignPdf.enterPasswordToUnlock');
 
   infoContainer.append(nameSpan, metaSpan);
 
@@ -550,8 +559,7 @@ async function handlePasswordInput(): Promise<void> {
 
     const certStatus = getElement<HTMLDivElement>('cert-status');
     if (certStatus) {
-      certStatus.innerHTML =
-        'Certificate unlocked <i data-lucide="check-circle" class="inline w-4 h-4"></i>';
+      certStatus.innerHTML = `${t('tools:digitalSignPdf.certificateUnlocked')} <i data-lucide="check-circle" class="inline w-4 h-4"></i>`;
       createIcons({ icons });
       certStatus.className = 'text-xs text-green-400';
     }
@@ -565,10 +573,10 @@ async function handlePasswordInput(): Promise<void> {
       const errorMessage =
         error instanceof Error
           ? error.message
-          : 'Invalid password or certificate';
+          : t('tools:digitalSignPdf.invalidPasswordOrCertificate');
       certStatus.textContent = errorMessage.includes('password')
-        ? 'Incorrect password'
-        : 'Failed to parse certificate';
+        ? t('tools:digitalSignPdf.incorrectPassword')
+        : t('tools:digitalSignPdf.failedParseCertificate');
       certStatus.className = 'text-xs text-red-400';
     }
   }
@@ -616,8 +624,8 @@ function updateProcessButton(): void {
 async function processSignature(): Promise<void> {
   if (!state.pdfBytes || !state.certData) {
     showAlert(
-      'Missing Data',
-      'Please upload both a PDF and a valid certificate.'
+      t('tools:digitalSignPdf.missingDataTitle'),
+      t('tools:digitalSignPdf.missingDataMessage')
     );
     return;
   }
@@ -699,7 +707,10 @@ async function processSignature(): Promise<void> {
     if (!state.sigImageData && !sigText && state.certData) {
       const certInfo = getCertificateInfo(state.certData.certificate);
       const date = new Date().toLocaleDateString();
-      sigText = `Digitally signed by ${certInfo.subject}\n${date}`;
+      sigText = t('tools:digitalSignPdf.defaultSignatureText', {
+        signer: certInfo.subject,
+        date,
+      });
     }
 
     let finalHeight = sigHeight;
@@ -728,7 +739,7 @@ async function processSignature(): Promise<void> {
     };
   }
 
-  showLoader('Applying digital signature...');
+  showLoader(t('tools:digitalSignPdf.applyingSignature'));
 
   try {
     const signedPdfBytes = await signPdf(state.pdfBytes, state.certData, {
@@ -739,15 +750,12 @@ async function processSignature(): Promise<void> {
     const blob = new Blob([signedPdfBytes.slice().buffer], {
       type: 'application/pdf',
     });
-    const originalName = state.pdfFile?.name ?? 'document.pdf';
-    const signedName = originalName.replace(/\.pdf$/i, '_signed.pdf');
-
-    downloadFile(blob, signedName);
+    downloadFile(blob, state.pdfFile?.name ?? 'document.pdf');
 
     hideLoader();
     showAlert(
-      'Success',
-      'PDF signed successfully! The signature can be verified in any PDF reader.',
+      t('common.success'),
+      t('tools:digitalSignPdf.successMessage'),
       'success',
       () => {
         resetState();
@@ -757,7 +765,7 @@ async function processSignature(): Promise<void> {
     hideLoader();
     console.error('Signing error:', error);
     const errorMessage =
-      error instanceof Error ? error.message : 'Unknown error occurred';
+      error instanceof Error ? error.message : t('common.unknownError');
 
     // Check if this is a CORS/network error from certificate chain fetching
     if (
@@ -766,11 +774,14 @@ async function processSignature(): Promise<void> {
       errorMessage.includes('NetworkError')
     ) {
       showAlert(
-        'Signing Failed',
-        'Failed to fetch certificate chain. This may be due to network issues or the certificate proxy being unavailable. Please check your internet connection and try again. If the issue persists, contact support.'
+        t('tools:digitalSignPdf.signingFailedTitle'),
+        t('tools:digitalSignPdf.chainFetchFailed')
       );
     } else {
-      showAlert('Signing Failed', `Failed to sign PDF: ${errorMessage}`);
+      showAlert(
+        t('tools:digitalSignPdf.signingFailedTitle'),
+        t('tools:digitalSignPdf.failedToSignPdf', { message: errorMessage })
+      );
     }
   }
 }

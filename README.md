@@ -13,6 +13,10 @@
 
 ![BentoPDF Tools](public/images/bentopdf-tools.png)
 
+### FOSS Hack 2026
+
+[![Watch Demo](https://img.shields.io/badge/Watch%20Demo-FOSS%20Hack%202026-red?style=for-the-badge&logo=googledrive)](https://drive.google.com/file/d/14Vf62PvHiuf1RKFKtMlAzpbf4QQPLpRF/view?usp=sharing)
+
 ---
 
 ## Table of Contents
@@ -37,8 +41,10 @@
   - [Self-Hosting Locally](#-self-hosting-locally)
   - [Docker Compose / Podman Compose](#-run-with-docker-compose--podman-compose-recommended)
   - [Podman Quadlet](#-podman-quadlet-systemd-integration)
-  - [Simple Mode](#-simple-mode-for-internal-use)
+  - [Self-Hosted Build (Simple Mode)](#-self-hosted-build-simple-mode)
+  - [Commercial Build](#-commercial-build)
   - [Custom Branding](#-custom-branding)
+  - [Disabling Specific Tools](#-disabling-specific-tools)
   - [WASM Configuration](#wasm-configuration)
   - [Air-Gapped / Offline Deployment](#air-gapped--offline-deployment)
   - [Security Features](#-security-features)
@@ -81,11 +87,11 @@ BentoPDF is **dual-licensed** to fit your needs:
 | License        | Best For                                     | Price              |
 | -------------- | -------------------------------------------- | ------------------ |
 | **AGPL-3.0**   | Open-source projects with public source code | **Free**           |
-| **Commercial** | Proprietary / closed-source applications     | **$49** (lifetime) |
+| **Commercial** | Proprietary / closed-source applications     | **$79** (lifetime) |
 
 <p align="center">
   <a href="https://buy.polar.sh/polar_cl_ThDfffbl733x7oAodcIryCzhlO57ZtcWPq6HJ1qMChd">
-    <img src="https://img.shields.io/badge/🚀_Get_Commercial_License-$49_Lifetime-6366f1?style=for-the-badge&labelColor=1f2937" alt="Get Commercial License">
+    <img src="https://img.shields.io/badge/🚀_Get_Commercial_License-$79_Lifetime-6366f1?style=for-the-badge&labelColor=1f2937" alt="Get Commercial License">
   </a>
 </p>
 
@@ -319,10 +325,18 @@ You can run BentoPDF locally for development or personal use.
 Run BentoPDF instantly from GitHub Container Registry (Recommended):
 
 ```bash
-docker run -p 3000:8080 ghcr.io/alam00000/bentopdf:latest
+docker run -p 3000:8080 ghcr.io/alam00000/bentopdf-simple:latest
 ```
 
 Open your browser at: http://localhost:3000
+
+> [!TIP]
+> BentoPDF ships in two builds:
+>
+> - **Self-Hosted build** — `ghcr.io/alam00000/bentopdf-simple:latest`. Every PDF tool the public site has, **without** the BentoPDF marketing (no hero, FAQ, testimonials, footer). Use this for internal/team/organization deployments. It is **not** a feature-reduced lite version.
+> - **Commercial build** — `ghcr.io/alam00000/bentopdf:latest`. The full marketing site, used by bentopdf.com itself and by commercial license holders running public-facing deployments. Includes hero, FAQ, testimonials, and footer.
+>
+> If in doubt: pull the Self Hosted build.
 
 <details>
 <summary><b>Alternative: Using Docker Hub or Podman</b></summary>
@@ -330,19 +344,19 @@ Open your browser at: http://localhost:3000
 **Docker Hub:**
 
 ```bash
-docker run -p 3000:8080 bentopdfteam/bentopdf:latest
+docker run -p 3000:8080 bentopdfteam/bentopdf-simple:latest
 ```
 
 **Podman (GHCR):**
 
 ```bash
-podman run -p 3000:8080 ghcr.io/alam00000/bentopdf:latest
+podman run -p 3000:8080 ghcr.io/alam00000/bentopdf-simple:latest
 ```
 
 **Podman (Docker Hub):**
 
 ```bash
-podman run -p 3000:8080 docker.io/bentopdfteam/bentopdf:latest
+podman run -p 3000:8080 docker.io/bentopdfteam/bentopdf-simple:latest
 ```
 
 > [!NOTE]
@@ -465,8 +479,8 @@ The default URLs are set in `.env.production`:
 
 ```bash
 VITE_WASM_PYMUPDF_URL=https://cdn.jsdelivr.net/npm/@bentopdf/pymupdf-wasm@0.11.16/
-VITE_WASM_GS_URL=https://cdn.jsdelivr.net/npm/@bentopdf/gs-wasm/assets/
-VITE_WASM_CPDF_URL=https://cdn.jsdelivr.net/npm/coherentpdf/dist/
+VITE_WASM_GS_URL=https://cdn.jsdelivr.net/npm/@bentopdf/gs-wasm@0.1.1/assets/
+VITE_WASM_CPDF_URL=https://cdn.jsdelivr.net/npm/coherentpdf@2.5.5/dist/
 VITE_TESSERACT_WORKER_URL=
 VITE_TESSERACT_CORE_URL=
 VITE_TESSERACT_LANG_URL=
@@ -740,8 +754,9 @@ For a more robust setup with auto-restart capabilities:
 ```yaml
 services:
   bentopdf:
-    image: ghcr.io/alam00000/bentopdf:latest # Recommended
-    # image: bentopdfteam/bentopdf:latest     # Alternative: Docker Hub
+    image: ghcr.io/alam00000/bentopdf-simple:latest # Self-Hosted build (recommended)
+    # image: bentopdfteam/bentopdf-simple:latest     # Self-Hosted build (Docker Hub)
+    # image: ghcr.io/alam00000/bentopdf:latest       # Commercial build (bentopdf.com / commercial license holders)
     container_name: bentopdf
     ports:
       - '3000:8080'
@@ -772,7 +787,7 @@ Description=BentoPDF - Privacy-first PDF toolkit
 After=network-online.target
 
 [Container]
-Image=ghcr.io/alam00000/bentopdf:latest
+Image=ghcr.io/alam00000/bentopdf-simple:latest
 ContainerName=bentopdf
 PublishPort=3000:8080
 AutoUpdate=registry
@@ -793,18 +808,61 @@ systemctl --user enable --now bentopdf
 
 For detailed Quadlet configuration, see [Self-Hosting Docker Guide](https://bentopdf.com/docs/self-hosting/docker).
 
-### 🏢 Simple Mode for Internal Use
+### 🏢 Self-Hosted build (Simple Mode)
 
-For organizations that want a clean, distraction-free interface focused solely on PDF tools, BentoPDF supports a **Simple Mode** that hides all branding and marketing content.
+The Self-Hosted build (the `bentopdf-simple` image, also called Simple Mode) is **functionally identical** to the Commercial build. Every PDF tool is present and behaves the same. It just hides the marketing that only makes sense on bentopdf.com itself or on a commercial public-facing deployment. **It is not a feature reduced or "lite" version.**
 
-**What Simple Mode does:**
+**What the Self-Hosted build hides** (cosmetic only, no PDF features are removed):
 
-- Hides navigation, hero section, features, FAQ, testimonials, and footer
-- Shows only the essential PDF tools
+- Navigation bar, hero section, features section, FAQ, testimonials, footer
 - Updates page title to "PDF Tools"
-- Perfect for internal company tools and educational institutions
 
-For more details, see [SIMPLE_MODE.md](SIMPLE_MODE.md).
+**What the Self-Hosted build keeps** (everything that actually does PDF work):
+
+- All PDF tools (merge, split, edit, sign, OCR, Office conversion, every other tool)
+- Custom branding support, all build-time and runtime config
+
+The Commercial build (`ghcr.io/alam00000/bentopdf:latest`) is what powers bentopdf.com itself and is used by commercial license holders running public facing deployments. It adds the hero, FAQ, testimonials, and footer that wouldn't make sense on an internal tool.
+
+If you're self-hosting BentoPDF for your team, organization, or as an internal tool, pull `ghcr.io/alam00000/bentopdf-simple:latest`. For more details, see [SIMPLE_MODE.md](SIMPLE_MODE.md).
+
+### 🏬 Commercial Build
+
+The Commercial build (the `bentopdf` image. Note: no `-simple` suffix) is what powers bentopdf.com itself. It includes the full marketing site (hero, features, FAQ, testimonials, footer) on top of every PDF tool. Use this build when you're running BentoPDF as a **public-facing PDF service under your own brand**. For example:
+
+- You're deploying BentoPDF as a hosted SaaS for end-users (with your own domain and branding)
+- You want the landing-page experience (marketing sections + tools), not just the tool surface
+- You're a commercial license holder embedding BentoPDF into a commercial product or workflow
+
+**Run it as-is** (carries BentoPDF branding by default. Useful to evaluate what the build looks like):
+
+```bash
+docker run -p 3000:8080 ghcr.io/alam00000/bentopdf:latest
+```
+
+**Build with your own brand** (the typical commercial path — replace the BentoPDF logo, name, and footer):
+
+```bash
+docker build \
+  --build-arg VITE_BRAND_NAME="AcmePDF" \
+  --build-arg VITE_BRAND_LOGO="images/acme-logo.svg" \
+  --build-arg VITE_FOOTER_TEXT="© 2026 Acme Corp. All rights reserved." \
+  -t acmepdf .
+
+docker run -p 3000:8080 acmepdf
+```
+
+Or set the same variables when building from source — see [Custom Branding](#-custom-branding) below for the full list of options.
+
+**Combine with other build-time flags** (`BASE_URL`, `VITE_DEFAULT_LANGUAGE`, `DISABLE_TOOLS`, `VITE_USE_CDN`, WASM URL overrides for air-gapped use, etc.) — every option that works on the Self-Hosted build also works here.
+
+> [!IMPORTANT]
+> **Licensing**: Running the Commercial build is allowed under both license options BentoPDF ships under:
+>
+> - **AGPL-3.0** (free): allowed if your deployment publishes its full source code under AGPL — this includes any branding modifications, custom configuration, and any code you build on top of it.
+> - **Commercial license** ($79 lifetime): required for closed-source / proprietary deployments — e.g., a private SaaS where you don't open-source your branding fork or surrounding business logic.
+>
+> See the [Licensing page](https://bentopdf.com/licensing.html) for the full comparison.
 
 ### 🎨 Custom Branding
 
@@ -842,12 +900,50 @@ Or set the values in `.env.production` before building.
 > [!TIP]
 > Branding works in both full mode and Simple Mode. You can combine it with other build-time options like `SIMPLE_MODE`, `BASE_URL`, and `VITE_DEFAULT_LANGUAGE`.
 
+### 🚫 Disabling Specific Tools
+
+Hide tools from the UI for compliance or security requirements. Disabled tools are removed from the homepage, search, keyboard shortcuts, workflow builder, and direct URL access.
+
+Tool IDs are the page URL without `.html` — open any tool and look at the URL (e.g., `edit-pdf`, `sign-pdf`, `encrypt-pdf`).
+
+**Build-time** (baked into the bundle):
+
+```bash
+docker build --build-arg DISABLE_TOOLS="edit-pdf,sign-pdf,encrypt-pdf" -t bentopdf .
+```
+
+**Runtime** (no rebuild — mount a `config.json`):
+
+```json
+{
+  "disabledTools": ["edit-pdf", "sign-pdf", "encrypt-pdf"]
+}
+```
+
+```bash
+docker run -d -p 3000:8080 \
+  -v ./config.json:/usr/share/nginx/html/config.json:ro \
+  ghcr.io/alam00000/bentopdf-simple:latest
+```
+
+Both methods can be combined — the lists are merged. For the full list of tool IDs, see the [self-hosting docs](https://bentopdf.com/docs/self-hosting/docker#disabling-specific-tools).
+
+You can also disable specific features inside the PDF Editor (e.g., redaction, forms) without disabling the entire editor. Add `editorDisabledCategories` to your `config.json`:
+
+```json
+{
+  "editorDisabledCategories": ["redaction"]
+}
+```
+
+For the full list of editor categories, see the [self-hosting docs](https://bentopdf.com/docs/self-hosting/docker#disabling-editor-features).
+
 ### 🔒 Security Features
 
 BentoPDF runs as a non-root user using nginx-unprivileged for enhanced security:
 
 - **Non-Root Execution**: Container runs with minimal privileges using nginx-unprivileged
-- **Port 8080**: Uses high port number to avoid requiring root privileges
+- **Port 8080**: Uses high port number to avoid requiring root privileges (configurable via `PORT` env var)
 - **Security Best Practices**: Follows Principle of Least Privilege
 
 #### Basic Usage
@@ -856,6 +952,18 @@ BentoPDF runs as a non-root user using nginx-unprivileged for enhanced security:
 docker build -t bentopdf .
 docker run -p 8080:8080 bentopdf
 ```
+
+#### Custom Port
+
+By default, BentoPDF listens on port `8080` inside the container. To change this, set the `PORT` environment variable:
+
+```bash
+docker run -p 3000:9090 -e PORT=9090 ghcr.io/alam00000/bentopdf-simple:latest
+```
+
+| Variable | Description                    | Default |
+| -------- | ------------------------------ | ------- |
+| `PORT`   | Nginx listen port in container | `8080`  |
 
 #### Custom User ID (PUID/PGID)
 
@@ -998,19 +1106,19 @@ DOCKER_BUILDKIT=1 docker build \
 
 ### 📦 Version Management
 
-BentoPDF supports semantic versioning with multiple container tags available:
+BentoPDF publishes two image variants. Both ship the same PDF tools. The difference is purely whether the bentopdf.com marketing is included.
 
-**GitHub Container Registry (Recommended):**
+**Self-Hosted build** — recommended for internal/team/organization deployments:
+
+- **Latest**: `ghcr.io/alam00000/bentopdf-simple:latest`
+- **Specific Version**: `ghcr.io/alam00000/bentopdf-simple:1.0.0`
+- **Docker Hub**: `bentopdfteam/bentopdf-simple:latest`
+
+**Commercial build** — used by bentopdf.com itself and by commercial license holders running public-facing deployments:
 
 - **Latest**: `ghcr.io/alam00000/bentopdf:latest`
 - **Specific Version**: `ghcr.io/alam00000/bentopdf:1.0.0`
-- **Version with Prefix**: `ghcr.io/alam00000/bentopdf:v1.0.0`
-
-**Docker Hub:**
-
-- **Latest**: `bentopdfteam/bentopdf:latest`
-- **Specific Version**: `bentopdfteam/bentopdf:1.0.0`
-- **Version with Prefix**: `bentopdfteam/bentopdf:v1.0.0`
+- **Docker Hub**: `bentopdfteam/bentopdf:latest`
 
 #### Quick Release
 
@@ -1045,10 +1153,14 @@ For detailed release instructions, see [RELEASE.md](RELEASE.md).
    ```
 
 3. **Run the Development Server**:
+
    ```bash
    npm run dev
    ```
+
    The application will be available at `http://localhost:5173`.
+
+   > The dev server binds to `localhost` only by default. To expose it on your LAN (e.g. for mobile device testing), set `VITE_DEV_HOST=0.0.0.0 npm run dev`. The built-in CORS proxy at `/cors-proxy?url=` restricts targets to a known host allowlist; to permit additional hosts in development, set `VITE_DEV_CORS_PROXY_EXTRA_HOSTS="host1.example.com,host2.example.com"`.
 
 #### Option 2: Build and Run with Docker Compose
 

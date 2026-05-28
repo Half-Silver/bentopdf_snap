@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <!-- Primary Meta Tags -->
-    <title>Rotate Custom Online Free - Rotate Custom Tool | BentoPDF</title>
     <meta
       name="title"
       content="Rotate Custom Online Free - Rotate Custom Tool | BentoPDF"
@@ -22,7 +21,7 @@
     />
 
     <!-- Canonical URL -->
-    <link rel="canonical" href="https://www.bentopdf.com/rotate-custom.html" />
+    <link rel="canonical" href="https://www.bentopdf.com/rotate-custom" />
 
     <!-- Open Graph / Facebook / LinkedIn -->
     <meta property="og:type" content="website" />
@@ -177,6 +176,9 @@
                   id="batch-custom-angle"
                   type="number"
                   value="0"
+                  step="0.1"
+                  min="-360"
+                  max="360"
                   class="w-20 h-10 text-center bg-gray-700 border border-gray-600 text-white rounded-lg"
                 />
                 <button
@@ -198,7 +200,7 @@
           <!-- Page Thumbnails -->
           <div
             id="page-thumbnails"
-            class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-4"
+            class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-4"
           ></div>
 
           <button id="process-btn" class="btn-gradient w-full mt-4">
@@ -393,7 +395,6 @@
     <script type="module" src="/src/js/utils/lucide-init.ts"></script>
     <script type="module" src="/src/js/utils/full-width.ts"></script>
     <script type="module" src="/src/js/utils/simple-mode-footer.ts"></script>
-    <script type="module" src="/src/version.ts"></script>
     <script type="module" src="/src/js/logic/rotate-custom-page.ts"></script>
     <script type="module" src="/src/js/mobileMenu.ts"></script>
     <script type="module" src="/src/js/main.ts"></script>
@@ -410,11 +411,6 @@
           "@type": "Offer",
           "price": "0",
           "priceCurrency": "USD"
-        },
-        "aggregateRating": {
-          "@type": "AggregateRating",
-          "ratingValue": "4.9",
-          "ratingCount": "2923"
         }
       }
     </script>

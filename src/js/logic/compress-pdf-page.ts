@@ -85,7 +85,10 @@ async function performCondenseCompression(
     scrub: {
       metadata: customSettings?.removeMetadata ?? preset.scrub.metadata,
       thumbnails: customSettings?.removeThumbnails ?? preset.scrub.thumbnails,
-      xmlMetadata: (preset.scrub as any).xmlMetadata ?? false,
+      xmlMetadata:
+        'xmlMetadata' in preset.scrub
+          ? (preset.scrub as { xmlMetadata: boolean }).xmlMetadata
+          : false,
     },
     subsetFonts: customSettings?.subsetFonts ?? preset.subsetFonts,
     save: {
@@ -99,8 +102,8 @@ async function performCondenseCompression(
   try {
     const result = await pymupdf.compressPdf(fileBlob, options);
     return result;
-  } catch (error: any) {
-    const errorMessage = error?.message || String(error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     if (
       errorMessage.includes('PatternType') ||
       errorMessage.includes('pattern')
@@ -432,7 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
           usedMethod = 'Condense';
 
           // Check if fallback was used
-          if ((result as any).usedFallback) {
+          if ((result as { usedFallback?: boolean }).usedFallback) {
             usedMethod +=
               ' (without image optimization due to unsupported patterns)';
           }
@@ -462,10 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const savingsPercent =
           savings > 0 ? ((savings / originalFile.size) * 100).toFixed(1) : 0;
 
-        downloadFile(
-          resultBlob,
-          originalFile.name.replace(/\.pdf$/i, '') + '_compressed.pdf'
-        );
+        downloadFile(resultBlob, originalFile.name);
 
         hideLoader();
 
@@ -520,8 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
 
           totalCompressedSize += resultBytes.length;
-          const baseName = file.name.replace(/\.pdf$/i, '');
-          zip.file(`${baseName}_compressed.pdf`, resultBytes);
+          zip.file(file.name, resultBytes);
         }
 
         const zipBlob = await zip.generateAsync({ type: 'blob' });
@@ -551,12 +550,12 @@ document.addEventListener('DOMContentLoaded', () => {
           );
         }
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       hideLoader();
       console.error('[CompressPDF] Error:', e);
       showAlert(
         'Error',
-        `An error occurred during compression. Error: ${e.message}`
+        `An error occurred during compression. Error: ${e instanceof Error ? e.message : String(e)}`
       );
     }
   };

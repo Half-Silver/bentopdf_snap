@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <!-- Primary Meta Tags -->
-    <title>Repair Pdf Online Free - Repair Pdf Tool | BentoPDF</title>
     <meta
       name="title"
       content="Repair Pdf Online Free - Repair Pdf Tool | BentoPDF"
@@ -22,7 +21,7 @@
     />
 
     <!-- Canonical URL -->
-    <link rel="canonical" href="https://www.bentopdf.com/repair-pdf.html" />
+    <link rel="canonical" href="https://www.bentopdf.com/repair-pdf" />
 
     <!-- Open Graph / Facebook / LinkedIn -->
     <meta property="og:type" content="website" />
@@ -174,7 +173,11 @@
         <!-- File Display Area -->
         <div id="file-display-area" class="mt-4 space-y-2"></div>
 
-        <button id="process-btn" class="btn-gradient w-full mt-6 hidden">
+        <button
+          id="process-btn"
+          class="btn-gradient w-full mt-6 hidden"
+          data-i18n="tools:repairPdf.name"
+        >
           Repair PDF
         </button>
       </div>
@@ -218,9 +221,7 @@
         </h3>
         <p id="alert-message" class="text-gray-300 mb-6"></p>
         <button
-          onclick="
-            document.getElementById('alert-modal').classList.add('hidden')
-          "
+          id="alert-ok"
           class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200"
         >
           OK
@@ -377,7 +378,6 @@
     <script type="module" src="/src/js/utils/lucide-init.ts"></script>
     <script type="module" src="/src/js/utils/full-width.ts"></script>
     <script type="module" src="/src/js/utils/simple-mode-footer.ts"></script>
-    <script type="module" src="/src/version.ts"></script>
     <script type="module" src="/src/js/logic/repair-pdf-page.ts"></script>
     <script type="module" src="/src/js/mobileMenu.ts"></script>
     <script type="module" src="/src/js/main.ts"></script>
@@ -394,11 +394,6 @@
           "@type": "Offer",
           "price": "0",
           "priceCurrency": "USD"
-        },
-        "aggregateRating": {
-          "@type": "AggregateRating",
-          "ratingValue": "4.6",
-          "ratingCount": "3968"
         }
       }
     </script>

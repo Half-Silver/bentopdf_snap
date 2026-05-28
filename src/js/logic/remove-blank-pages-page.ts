@@ -4,6 +4,7 @@ import { createIcons, icons } from 'lucide';
 import { initPagePreview } from '../utils/page-preview.js';
 import { loadPdfWithPasswordPrompt } from '../utils/password-prompt.js';
 import { loadPdfDocument } from '../utils/load-pdf-document.js';
+import { escapeHtml } from '../utils/helpers.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -36,7 +37,7 @@ function hideLoader() {
 function showAlert(
   title: string,
   msg: string,
-  type = 'error',
+  _type = 'error',
   cb?: () => void
 ) {
   const modal = document.getElementById('alert-modal');
@@ -79,7 +80,7 @@ function updateFileDisplay() {
         <div class="bg-gray-700 p-3 rounded-lg border border-gray-600 hover:border-indigo-500 transition-colors">
             <div class="flex items-center justify-between">
                 <div class="flex-1 min-w-0">
-                    <p class="truncate font-medium text-white">${pageState.file.name}</p>
+                    <p class="truncate font-medium text-white">${escapeHtml(pageState.file.name)}</p>
                     <p class="text-gray-400 text-sm">${fileSize} • ${pageCount} page${pageCount !== 1 ? 's' : ''}</p>
                 </div>
                 <button id="remove-file" class="text-red-400 hover:text-red-300 p-2 flex-shrink-0 ml-2" title="Remove file">
@@ -138,7 +139,7 @@ async function handleFileUpload(file: File) {
 }
 
 async function isPageBlank(
-  page: any,
+  page: pdfjsLib.PDFPageProxy,
   maxNonWhitePercent = 0.5
 ): Promise<boolean> {
   const viewport = page.getViewport({ scale: 0.5 });
@@ -149,7 +150,7 @@ async function isPageBlank(
   canvas.width = viewport.width;
   canvas.height = viewport.height;
 
-  await page.render({ canvasContext: ctx, viewport }).promise;
+  await page.render({ canvas: null, canvasContext: ctx, viewport }).promise;
 
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const data = imageData.data;
@@ -165,7 +166,7 @@ async function isPageBlank(
   return nonWhitePercent <= maxNonWhitePercent;
 }
 
-async function generateThumbnail(page: any): Promise<string> {
+async function generateThumbnail(page: pdfjsLib.PDFPageProxy): Promise<string> {
   const viewport = page.getViewport({ scale: 1 });
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
@@ -174,7 +175,7 @@ async function generateThumbnail(page: any): Promise<string> {
   canvas.width = viewport.width;
   canvas.height = viewport.height;
 
-  await page.render({ canvasContext: ctx, viewport }).promise;
+  await page.render({ canvas: null, canvasContext: ctx, viewport }).promise;
   return canvas.toDataURL('image/jpeg', 0.7);
 }
 
@@ -313,7 +314,7 @@ async function processRemoveBlankPages() {
     const newPdfBytes = await newPdf.save();
     downloadFile(
       new Blob([new Uint8Array(newPdfBytes)], { type: 'application/pdf' }),
-      'blank-pages-removed.pdf'
+      pageState.file?.name || 'document.pdf'
     );
     showAlert(
       'Success',

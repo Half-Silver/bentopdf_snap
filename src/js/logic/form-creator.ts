@@ -18,17 +18,10 @@ type LucideWindow = Window & {
     createIcons(): void;
   };
 };
-type PdfViewerApplicationLike = {
-  pdfViewer?: {
-    pagesCount: number;
-  };
-};
-type PdfViewerWindow = Window & {
-  PDFViewerApplication?: PdfViewerApplicationLike;
-};
 
+import DOMPurify from 'dompurify';
 import { initializeGlobalShortcuts } from '../utils/shortcuts-init.js';
-import { downloadFile, hexToRgb, getPDFDocument } from '../utils/helpers.js';
+import { downloadFile, escapeHtml, hexToRgb } from '../utils/helpers.js';
 import { loadPdfWithPasswordPrompt } from '../utils/password-prompt.js';
 import { createIcons, icons } from 'lucide';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -65,10 +58,9 @@ let pages: PageData[] = [];
 let currentPageIndex = 0;
 let uploadedPdfDoc: PDFDocument | null = null;
 let uploadedPdfjsDoc: PDFDocumentProxy | null = null;
+let uploadedFileName: string | null = null;
 let pageSize: { width: number; height: number } = { width: 612, height: 792 };
 let currentScale = 1.333;
-let pdfViewerOffset = { x: 0, y: 0 };
-let pdfViewerScale = 1.333;
 
 let resizing = false;
 let resizeField: FormField | null = null;
@@ -319,15 +311,15 @@ toolItems.forEach((item) => {
   let touchStartY = 0;
   let isTouchDragging = false;
 
-  item.addEventListener('touchstart', (e) => {
+  item.addEventListener('touchstart', (e: TouchEvent) => {
     const touch = e.touches[0];
     touchStartX = touch.clientX;
     touchStartY = touch.clientY;
     isTouchDragging = false;
   });
 
-  item.addEventListener('touchmove', (e) => {
-    e.preventDefault(); // Prevent scrolling while dragging
+  item.addEventListener('touchmove', (e: TouchEvent) => {
+    e.preventDefault();
     const touch = e.touches[0];
     const moveX = Math.abs(touch.clientX - touchStartX);
     const moveY = Math.abs(touch.clientY - touchStartY);
@@ -338,7 +330,7 @@ toolItems.forEach((item) => {
     }
   });
 
-  item.addEventListener('touchend', (e) => {
+  item.addEventListener('touchend', (e: TouchEvent) => {
     e.preventDefault();
     if (!isTouchDragging) {
       // It was a tap, treat as click
@@ -729,7 +721,7 @@ function renderField(field: FormField): void {
       field,
       '#ffffff'
     );
-    contentEl.innerHTML = `<div class="flex items-center gap-2 px-2"><i data-lucide="calendar" class="w-4 h-4"></i><span class="text-sm date-format-text">${field.dateFormat || 'mm/dd/yyyy'}</span></div>`;
+    contentEl.innerHTML = `<div class="flex items-center gap-2 px-2"><i data-lucide="calendar" class="w-4 h-4"></i><span class="text-sm date-format-text">${escapeHtml(field.dateFormat || 'mm/dd/yyyy')}</span></div>`;
     setTimeout(() => (window as LucideWindow).lucide?.createIcons(), 0);
   } else if (field.type === 'image') {
     contentEl.className =
@@ -738,7 +730,7 @@ function renderField(field: FormField): void {
       field,
       '#f3f4f6'
     );
-    contentEl.innerHTML = `<div class="flex flex-col items-center text-center p-1"><i data-lucide="image" class="w-6 h-6 mb-1"></i><span class="text-[10px] leading-tight">${field.label || 'Click to Upload Image'}</span></div>`;
+    contentEl.innerHTML = `<div class="flex flex-col items-center text-center p-1"><i data-lucide="image" class="w-6 h-6 mb-1"></i><span class="text-[10px] leading-tight">${escapeHtml(field.label || 'Click to Upload Image')}</span></div>`;
     setTimeout(() => (window as LucideWindow).lucide?.createIcons(), 0);
   } else if (field.type === 'barcode') {
     contentEl.className = 'w-full h-full flex items-center justify-center';
@@ -763,7 +755,8 @@ function renderField(field: FormField): void {
         contentEl.appendChild(img);
       } catch (error) {
         console.warn(
-          `Failed to render barcode preview for field "${field.name}":`,
+          'Failed to render barcode preview for field:',
+          String(field.name).replace(/[\r\n]+/g, ' '),
           error
         );
         contentEl.innerHTML = `<div class="flex flex-col items-center text-center p-1 text-gray-400"><i data-lucide="qr-code" class="w-6 h-6 mb-1"></i><span class="text-[10px] leading-tight">Invalid data</span></div>`;
@@ -1114,7 +1107,7 @@ function showProperties(field: FormField): void {
     specificProps = `
         <div>
             <label class="block text-xs font-semibold text-gray-300 mb-1">Value</label>
-            <input type="text" id="propValue" value="${field.defaultValue}" ${field.combCells > 0 ? `maxlength="${field.combCells}"` : field.maxLength > 0 ? `maxlength="${field.maxLength}"` : ''} class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+            <input type="text" id="propValue" value="${escapeHtml(field.defaultValue)}" ${field.combCells > 0 ? `maxlength="${field.combCells}"` : field.maxLength > 0 ? `maxlength="${field.maxLength}"` : ''} class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
         </div>
         <div>
             <label class="block text-xs font-semibold text-gray-300 mb-1">Max Length (0 for unlimited)</label>
@@ -1160,11 +1153,11 @@ function showProperties(field: FormField): void {
     specificProps = `
         <div>
             <label class="block text-xs font-semibold text-gray-300 mb-1">Group Name (Must be same for group)</label>
-            <input type="text" id="propGroupName" value="${field.groupName}" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+            <input type="text" id="propGroupName" value="${escapeHtml(field.groupName)}" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
         </div>
         <div>
             <label class="block text-xs font-semibold text-gray-300 mb-1">Export Value</label>
-            <input type="text" id="propExportValue" value="${field.exportValue}" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+            <input type="text" id="propExportValue" value="${escapeHtml(field.exportValue)}" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
         </div>
         <div class="flex items-center justify-between bg-gray-600 p-2 rounded mt-2">
             <label for="propChecked" class="text-xs font-semibold text-gray-300">Checked State</label>
@@ -1177,13 +1170,13 @@ function showProperties(field: FormField): void {
     specificProps = `
         <div>
             <label class="block text-xs font-semibold text-gray-300 mb-1">Options (One per line or comma separated)</label>
-            <textarea id="propOptions" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500 h-24">${field.options?.join('\n')}</textarea>
+            <textarea id="propOptions" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500 h-24">${escapeHtml(field.options?.join('\n') ?? '')}</textarea>
         </div>
         <div>
             <label class="block text-xs font-semibold text-gray-300 mb-1">Selected Option</label>
             <select id="propSelectedOption" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
                 <option value="">None</option>
-                ${field.options?.map((opt) => `<option value="${opt}" ${field.defaultValue === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                ${field.options?.map((opt) => `<option value="${escapeHtml(opt)}" ${field.defaultValue === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}
             </select>
         </div>
         <div class="text-xs text-gray-400 italic mt-2">
@@ -1194,7 +1187,7 @@ function showProperties(field: FormField): void {
     specificProps = `
         <div>
             <label class="block text-xs font-semibold text-gray-300 mb-1">Label</label>
-            <input type="text" id="propLabel" value="${field.label}" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+            <input type="text" id="propLabel" value="${escapeHtml(field.label)}" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
         </div>
         <div>
             <label class="block text-xs font-semibold text-gray-300 mb-1">Action</label>
@@ -1209,11 +1202,11 @@ function showProperties(field: FormField): void {
         </div>
         <div id="propUrlContainer" class="${field.action === 'url' ? '' : 'hidden'}">
             <label class="block text-xs font-semibold text-gray-300 mb-1">URL</label>
-            <input type="text" id="propActionUrl" value="${field.actionUrl || ''}" placeholder="https://example.com" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+            <input type="text" id="propActionUrl" value="${escapeHtml(field.actionUrl || '')}" placeholder="https://example.com" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
         </div>
         <div id="propJsContainer" class="${field.action === 'js' ? '' : 'hidden'}">
             <label class="block text-xs font-semibold text-gray-300 mb-1">Javascript Code</label>
-            <textarea id="propJsScript" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500 h-24 font-mono">${field.jsScript || ''}</textarea>
+            <textarea id="propJsScript" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500 h-24 font-mono">${escapeHtml(field.jsScript || '')}</textarea>
         </div>
         <div id="propShowHideContainer" class="${field.action === 'showHide' ? '' : 'hidden'}">
             <div class="mb-2">
@@ -1224,7 +1217,7 @@ function showProperties(field: FormField): void {
                       .filter((f) => f.id !== field.id)
                       .map(
                         (f) =>
-                          `<option value="${f.name}" ${field.targetFieldName === f.name ? 'selected' : ''}>${f.name} (${f.type})</option>`
+                          `<option value="${escapeHtml(f.name)}" ${field.targetFieldName === f.name ? 'selected' : ''}>${escapeHtml(f.name)} (${escapeHtml(f.type)})</option>`
                       )
                       .join('')}
                 </select>
@@ -1290,7 +1283,7 @@ function showProperties(field: FormField): void {
         </div>
         <div id="customFormatContainer" class="${isCustom ? '' : 'hidden'} mt-2">
             <label class="block text-xs font-semibold text-gray-300 mb-1">Custom Format</label>
-            <input type="text" id="propCustomFormat" value="${isCustom ? field.dateFormat : ''}" placeholder="e.g. dd/mm/yyyy HH:MM:ss" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+            <input type="text" id="propCustomFormat" value="${isCustom ? escapeHtml(field.dateFormat ?? '') : ''}" placeholder="e.g. dd/mm/yyyy HH:MM:ss" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
         </div>
         <div class="mt-3 p-2 bg-gray-700 rounded">
             <span class="text-xs text-gray-400">Example of current format:</span>
@@ -1307,7 +1300,7 @@ function showProperties(field: FormField): void {
     specificProps = `
         <div>
             <label class="block text-xs font-semibold text-gray-300 mb-1">Label / Prompt</label>
-            <input type="text" id="propLabel" value="${field.label}" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+            <input type="text" id="propLabel" value="${escapeHtml(field.label)}" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
         </div>
         <div class="text-xs text-gray-400 italic mt-2">
             Clicking this field in the PDF will open a file picker to upload an image.
@@ -1329,17 +1322,17 @@ function showProperties(field: FormField): void {
         </div>
         <div>
             <label class="block text-xs font-semibold text-gray-300 mb-1">Barcode Value</label>
-            <input type="text" id="propBarcodeValue" value="${field.barcodeValue || ''}" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+            <input type="text" id="propBarcodeValue" value="${escapeHtml(field.barcodeValue || '')}" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
         </div>
         <div id="barcodeFormatHint" class="text-xs text-gray-400 italic"></div>
         `;
   }
 
-  propertiesPanel.innerHTML = `
+  const propertiesHtml = `
     <div class="space-y-3">
       <div>
         <label class="block text-xs font-semibold text-gray-300 mb-1">Field Name ${field.type === 'radio' ? '(Group Name)' : ''}</label>
-        <input type="text" id="propName" value="${field.name}" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+        <input type="text" id="propName" value="${escapeHtml(field.name)}" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
         <div id="nameError" class="hidden text-red-400 text-xs mt-1"></div>
       </div>
       ${
@@ -1352,7 +1345,10 @@ function showProperties(field: FormField): void {
         <select id="existingGroups" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
           <option value="">-- Select existing group --</option>
           ${Array.from(existingRadioGroups)
-            .map((name) => `<option value="${name}">${name}</option>`)
+            .map(
+              (name) =>
+                `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`
+            )
             .join('')}
           ${Array.from(
             new Set(
@@ -1363,7 +1359,7 @@ function showProperties(field: FormField): void {
           )
             .map((name) =>
               !existingRadioGroups.has(name)
-                ? `<option value="${name}">${name}</option>`
+                ? `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`
                 : ''
             )
             .join('')}
@@ -1376,7 +1372,7 @@ function showProperties(field: FormField): void {
       ${specificProps}
       <div>
         <label class="block text-xs font-semibold text-gray-300 mb-1">Tooltip / Help Text</label>
-        <input type="text" id="propTooltip" value="${field.tooltip}" placeholder="Description for screen readers" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+        <input type="text" id="propTooltip" value="${escapeHtml(field.tooltip)}" placeholder="Description for screen readers" class="w-full bg-gray-600 border border-gray-500 text-white rounded px-2 py-1 text-sm focus:ring-indigo-500 focus:border-indigo-500">
       </div>
       <div class="flex items-center">
         <input type="checkbox" id="propRequired" ${field.required ? 'checked' : ''} class="mr-2">
@@ -1403,6 +1399,10 @@ function showProperties(field: FormField): void {
       </button>
     </div>
   `;
+
+  propertiesPanel.innerHTML = DOMPurify.sanitize(propertiesHtml, {
+    ADD_ATTR: ['target'],
+  });
 
   // Common listeners
   const propName = document.getElementById('propName') as HTMLInputElement;
@@ -1793,7 +1793,7 @@ function showProperties(field: FormField): void {
           field.options
             ?.map(
               (opt) =>
-                `<option value="${opt}" ${currentVal === opt ? 'selected' : ''}>${opt}</option>`
+                `<option value="${escapeHtml(opt)}" ${currentVal === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`
             )
             .join('');
 
@@ -2131,8 +2131,7 @@ downloadBtn.addEventListener('click', async () => {
     nameCount.set(field.name, count + 1);
 
     if (existingFieldNames.has(field.name)) {
-      if (field.type === 'radio' && existingRadioGroups.has(field.name)) {
-      } else {
+      if (!(field.type === 'radio' && existingRadioGroups.has(field.name))) {
         conflictsWithPdf.push(field.name);
       }
     }
@@ -2228,23 +2227,11 @@ downloadBtn.addEventListener('click', async () => {
       const pdfPage = pdfDoc.getPage(field.pageIndex);
       const { height: pageHeight } = pdfPage.getSize();
 
-      const scaleX = 1 / pdfViewerScale;
-      const scaleY = 1 / pdfViewerScale;
-
-      const adjustedX = field.x - pdfViewerOffset.x;
-      const adjustedY = field.y - pdfViewerOffset.y;
-
-      const x = adjustedX * scaleX;
-      const y = pageHeight - adjustedY * scaleY - field.height * scaleY;
-      const width = field.width * scaleX;
-      const height = field.height * scaleY;
-
-      console.log(`Field "${field.name}":`, {
-        screenPos: { x: field.x, y: field.y },
-        adjustedPos: { x: adjustedX, y: adjustedY },
-        pdfPos: { x, y, width, height },
-        metrics: { offset: pdfViewerOffset, scale: pdfViewerScale },
-      });
+      const x = field.x / currentScale;
+      const y =
+        pageHeight - field.y / currentScale - field.height / currentScale;
+      const width = field.width / currentScale;
+      const height = field.height / currentScale;
 
       if (field.type === 'text') {
         const textField = form.createTextField(field.name);
@@ -2337,13 +2324,19 @@ downloadBtn.addEventListener('click', async () => {
           const existingField = form.getFieldMaybe(groupName);
 
           if (existingField) {
-            radioGroup = existingField;
+            radioGroup = existingField as PDFRadioGroup;
             radioGroups.set(groupName, radioGroup);
-            console.log(`Using existing radio group from PDF: ${groupName}`);
+            console.log(
+              'Using existing radio group from PDF:',
+              String(groupName).replace(/[\r\n]+/g, ' ')
+            );
           } else {
             radioGroup = form.createRadioGroup(groupName);
             radioGroups.set(groupName, radioGroup);
-            console.log(`Created new radio group: ${groupName}`);
+            console.log(
+              'Created new radio group:',
+              String(groupName).replace(/[\r\n]+/g, ' ')
+            );
           }
         }
 
@@ -2500,7 +2493,12 @@ downloadBtn.addEventListener('click', async () => {
                 JS: field.jsScript,
               });
             } else if (field.action === 'showHide' && field.targetFieldName) {
-              const target = field.targetFieldName;
+              const target = field.targetFieldName
+                .replace(/\\/g, '\\\\')
+                .replace(/"/g, '\\"')
+                .replace(/\r/g, '\\r')
+                .replace(/\n/g, '\\n')
+                .replace(/\0/g, '\\0');
               let script: string;
 
               if (field.visibilityAction === 'show') {
@@ -2704,7 +2702,8 @@ downloadBtn.addEventListener('click', async () => {
             pdfPage.drawImage(pngImage, { x, y, width, height });
           } catch (e) {
             console.warn(
-              `Failed to generate barcode for field "${field.name}":`,
+              'Failed to generate barcode for field:',
+              String(field.name).replace(/[\r\n]+/g, ' '),
               e
             );
           }
@@ -2718,7 +2717,7 @@ downloadBtn.addEventListener('click', async () => {
     const blob = new Blob([new Uint8Array(pdfBytes)], {
       type: 'application/pdf',
     });
-    downloadFile(blob, 'fillable-form.pdf');
+    downloadFile(blob, uploadedFileName || 'document.pdf');
     showModal(
       'Success',
       'Your PDF has been downloaded successfully.',
@@ -2788,11 +2787,11 @@ function getPageDimensions(size: string): { width: number; height: number } {
     case 'a3':
       dimensions = PageSizes.A3;
       break;
-    case 'custom':
-      // Get custom dimensions from inputs
+    case 'custom': {
       const width = parseInt(customWidth.value) || 612;
       const height = parseInt(customHeight.value) || 792;
       return { width, height };
+    }
     default:
       dimensions = PageSizes.Letter;
   }
@@ -2862,181 +2861,53 @@ async function renderCanvas(): Promise<void> {
 
   canvas.innerHTML = '';
 
-  if (uploadedPdfDoc) {
+  if (uploadedPdfjsDoc) {
     try {
-      const arrayBuffer = await uploadedPdfDoc.save();
-      const blob = new Blob([arrayBuffer.buffer as ArrayBuffer], {
-        type: 'application/pdf',
-      });
-      const blobUrl = URL.createObjectURL(blob);
+      const pdfjsPage = await uploadedPdfjsDoc.getPage(currentPageIndex + 1);
+      const viewport = pdfjsPage.getViewport({ scale: currentScale });
 
-      const iframe = document.createElement('iframe');
-      iframe.src = `${import.meta.env.BASE_URL}pdfjs-viewer/viewer.html?file=${encodeURIComponent(blobUrl)}#page=${currentPageIndex + 1}&toolbar=0`;
-      iframe.style.width = '100%';
-      iframe.style.height = `${canvasHeight}px`;
-      iframe.style.border = 'none';
-      iframe.style.position = 'absolute';
-      iframe.style.top = '0';
-      iframe.style.left = '0';
-      iframe.style.pointerEvents = 'none';
-      iframe.style.opacity = '0.8';
+      const pageCanvas = document.createElement('canvas');
+      pageCanvas.width = viewport.width;
+      pageCanvas.height = viewport.height;
+      pageCanvas.style.position = 'absolute';
+      pageCanvas.style.top = '0';
+      pageCanvas.style.left = '0';
+      pageCanvas.style.pointerEvents = 'none';
 
-      iframe.onload = () => {
-        try {
-          const viewerWindow = iframe.contentWindow as PdfViewerWindow | null;
-          if (viewerWindow && viewerWindow.PDFViewerApplication) {
-            const app = viewerWindow.PDFViewerApplication;
+      const ctx = pageCanvas.getContext('2d');
+      if (ctx) {
+        await pdfjsPage.render({
+          canvasContext: ctx,
+          viewport,
+          canvas: pageCanvas,
+        }).promise;
+      }
 
-            const style = viewerWindow.document.createElement('style');
-            style.textContent = `
-                            * {
-                                margin: 0 !important;
-                                padding: 0 !important;
-                            }
-                            html, body {
-                                margin: 0 !important;
-                                padding: 0 !important;
-                                background-color: transparent !important;
-                                overflow: hidden !important;
-                            }
-                            #toolbarContainer {
-                                display: none !important;
-                            }
-                            #mainContainer {
-                                top: 0 !important;
-                                position: absolute !important;
-                                left: 0 !important;
-                                margin: 0 !important;
-                                padding: 0 !important;
-                            }
-                            #outerContainer {
-                                background-color: transparent !important;
-                                margin: 0 !important;
-                                padding: 0 !important;
-                            }
-                            #viewerContainer {
-                                top: 0 !important;
-                                background-color: transparent !important;
-                                overflow: hidden !important;
-                                margin: 0 !important;
-                                padding: 0 !important;
-                            }
-                            .toolbar {
-                                display: none !important;
-                            }
-                            .pdfViewer {
-                                padding: 0 !important;
-                                margin: 0 !important;
-                            }
-                            .page {
-                                margin: 0 !important;
-                                padding: 0 !important;
-                                border: none !important;
-                                box-shadow: none !important;
-                            }
-                        `;
-            viewerWindow.document.head.appendChild(style);
+      canvas.appendChild(pageCanvas);
 
-            const checkRender = setInterval(() => {
-              if (app.pdfViewer && app.pdfViewer.pagesCount > 0) {
-                clearInterval(checkRender);
+      if (pendingFieldExtraction && uploadedPdfDoc) {
+        pendingFieldExtraction = false;
+        extractExistingFields(uploadedPdfDoc);
+        extractedFieldNames.forEach((name) => existingFieldNames.delete(name));
 
-                const pageContainer =
-                  viewerWindow.document.querySelector<HTMLElement>('.page');
-                if (pageContainer) {
-                  const initialRect = pageContainer.getBoundingClientRect();
-
-                  const offsetX = -initialRect.left;
-                  const offsetY = -initialRect.top;
-                  pageContainer.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
-
-                  setTimeout(() => {
-                    const rect = pageContainer.getBoundingClientRect();
-                    const style = viewerWindow.getComputedStyle(pageContainer);
-
-                    const borderLeft = parseFloat(style.borderLeftWidth) || 0;
-                    const borderTop = parseFloat(style.borderTopWidth) || 0;
-                    const borderRight = parseFloat(style.borderRightWidth) || 0;
-
-                    pdfViewerOffset = {
-                      x: rect.left + borderLeft,
-                      y: rect.top + borderTop,
-                    };
-
-                    const contentWidth = rect.width - borderLeft - borderRight;
-                    pdfViewerScale = contentWidth / currentPage.width;
-
-                    console.log('📏 Calibrated Metrics (force positioned):', {
-                      initialPosition: {
-                        left: initialRect.left,
-                        top: initialRect.top,
-                      },
-                      appliedTransform: { x: offsetX, y: offsetY },
-                      finalRect: {
-                        left: rect.left,
-                        top: rect.top,
-                        width: rect.width,
-                        height: rect.height,
-                      },
-                      computedBorders: {
-                        left: borderLeft,
-                        top: borderTop,
-                        right: borderRight,
-                      },
-                      finalOffset: pdfViewerOffset,
-                      finalScale: pdfViewerScale,
-                      pdfDimensions: {
-                        width: currentPage.width,
-                        height: currentPage.height,
-                      },
-                    });
-
-                    if (pendingFieldExtraction && uploadedPdfDoc) {
-                      pendingFieldExtraction = false;
-                      extractExistingFields(uploadedPdfDoc);
-                      extractedFieldNames.forEach((name) =>
-                        existingFieldNames.delete(name)
-                      );
-
-                      const form = uploadedPdfDoc.getForm();
-                      for (const name of extractedFieldNames) {
-                        try {
-                          const existingField = form.getFieldMaybe(name);
-                          if (existingField) {
-                            form.removeField(existingField);
-                          }
-                        } catch (error) {
-                          console.warn(
-                            `Failed to remove extracted field "${name}" after import:`,
-                            error
-                          );
-                        }
-                      }
-
-                      renderCanvas();
-                      updateFieldCount();
-                    }
-                  }, 50);
-                }
-              }
-            }, 100);
+        const form = uploadedPdfDoc.getForm();
+        for (const name of extractedFieldNames) {
+          try {
+            const existingField = form.getFieldMaybe(name);
+            if (existingField) {
+              form.removeField(existingField);
+            }
+          } catch (error) {
+            console.warn(
+              `Failed to remove extracted field "${name}" after import:`,
+              error
+            );
           }
-        } catch (e) {
-          console.error('Error accessing iframe content:', e);
         }
-      };
 
-      canvas.appendChild(iframe);
-
-      console.log('Canvas dimensions:', {
-        width: canvasWidth,
-        height: canvasHeight,
-        scale: currentScale,
-      });
-      console.log('PDF page dimensions:', {
-        width: currentPage.width,
-        height: currentPage.height,
-      });
+        renderCanvas();
+        updateFieldCount();
+      }
     } catch (error) {
       console.error('Error rendering PDF:', error);
     }
@@ -3115,8 +2986,8 @@ function extractExistingFields(pdfDoc: PDFDocument): void {
         pdfDoc,
         fieldCounterStart: fieldCounter,
         metrics: {
-          pdfViewerOffset,
-          pdfViewerScale,
+          pdfViewerOffset: { x: 0, y: 0 },
+          pdfViewerScale: currentScale,
         },
       });
 
@@ -3142,6 +3013,7 @@ async function handlePdfUpload(file: File) {
     const arrayBuffer = result.bytes;
     uploadedPdfjsDoc = result.pdf;
     uploadedPdfDoc = await loadPdfDocument(arrayBuffer);
+    uploadedFileName = file.name;
 
     // Check for existing fields and update counter
     existingFieldNames.clear();

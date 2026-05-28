@@ -16,15 +16,15 @@ import {
 import { createIcons, icons } from 'lucide';
 import * as pdfjsLib from 'pdfjs-dist';
 import Sortable from 'sortablejs';
+import type { MergeJob, MergeFile, MergeMessage, MergeResponse } from '@/types';
 
-// @ts-ignore
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url
 ).toString();
 
 interface MergeState {
-  pdfDocs: Record<string, any>;
+  pdfDocs: Record<string, pdfjsLib.PDFDocumentProxy>;
   pdfBytes: Record<string, ArrayBuffer>;
   activeMode: 'file' | 'page';
   sortableInstances: {
@@ -66,10 +66,10 @@ function initializeFileListSortable() {
     ghostClass: 'sortable-ghost',
     chosenClass: 'sortable-chosen',
     dragClass: 'sortable-drag',
-    onStart: function (evt: any) {
+    onStart: function (evt: Sortable.SortableEvent) {
       evt.item.style.opacity = '0.5';
     },
-    onEnd: function (evt: any) {
+    onEnd: function (evt: Sortable.SortableEvent) {
       evt.item.style.opacity = '1';
     },
   });
@@ -88,10 +88,10 @@ function initializePageThumbnailsSortable() {
     ghostClass: 'sortable-ghost',
     chosenClass: 'sortable-chosen',
     dragClass: 'sortable-drag',
-    onStart: function (evt: any) {
+    onStart: function (evt: Sortable.SortableEvent) {
       evt.item.style.opacity = '0.5';
     },
-    onEnd: function (evt: any) {
+    onEnd: function (evt: Sortable.SortableEvent) {
       evt.item.style.opacity = '1';
     },
   });
@@ -201,7 +201,7 @@ async function renderPageMergeThumbnails() {
           batchSize: 8,
           useLazyLoading: true,
           lazyLoadMargin: '300px',
-          onProgress: (current, total) => {
+          onProgress: () => {
             currentPageNumber++;
             showLoader(`Rendering page previews...`);
           },
@@ -288,9 +288,7 @@ export async function merge() {
 
   showLoader('Merging PDFs...');
   try {
-    // @ts-ignore
     const jobs: MergeJob[] = [];
-    // @ts-ignore
     const filesToMerge: MergeFile[] = [];
     const uniqueFileNames = new Set<string>();
 
@@ -387,12 +385,16 @@ export async function merge() {
       }
     }
 
-    // @ts-ignore
+    const retainCheckbox = document.getElementById(
+      'retain-page-labels'
+    ) as HTMLInputElement | null;
+
     const message: MergeMessage = {
       command: 'merge',
       files: filesToMerge,
       jobs: jobs,
       cpdfUrl: WasmProvider.getUrl('cpdf')! + 'coherentpdf.browser.min.js',
+      retainPageLabels: retainCheckbox?.checked ?? false,
     };
 
     mergeWorker.postMessage(
@@ -400,7 +402,6 @@ export async function merge() {
       filesToMerge.map((f) => f.data)
     );
 
-    // @ts-ignore
     mergeWorker.onmessage = (e: MessageEvent<MergeResponse>) => {
       hideLoader();
       if (e.data.status === 'success') {
